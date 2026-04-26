@@ -1,0 +1,228 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"meetBack/internal/model"
+
+	"github.com/uptrace/bun"
+)
+
+type MeetingRepository struct {
+	db *bun.DB
+}
+
+func NewMeetingRepository(db *bun.DB) *MeetingRepository {
+	return &MeetingRepository{db: db}
+}
+
+func (r *MeetingRepository) CreateMeeting(ctx context.Context, req *model.Meeting) (*model.Meeting, error) {
+	_, err := r.db.NewInsert().Model(req).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (r *MeetingRepository) GetMeetingById(ctx context.Context, id uint32) (*model.Meeting, error) {
+	var meeting model.Meeting
+	err := r.db.NewSelect().Model(&meeting).Where("id = ?", id).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &meeting, nil
+}
+
+func (r *MeetingRepository) GetMeetings(ctx context.Context, cursor string, limit uint32) ([]*model.Meeting, string, error) {
+	var meetings []*model.Meeting
+
+	query := r.db.NewSelect().Model(&meetings).Order("id DESC").Limit(int(limit) + 1)
+
+	if cursor != "" {
+		query.Where("id < ?", cursor)
+	}
+
+	err := query.Scan(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(meetings) > int(limit) {
+		nextCursor = fmt.Sprint(meetings[limit-1].ID)
+		meetings = meetings[:limit]
+	}
+
+	return meetings, nextCursor, nil
+}
+
+func (r *MeetingRepository) UpdateMeeting(ctx context.Context, meeting *model.Meeting) (*model.Meeting, error) {
+	_, err := r.db.NewUpdate().Model(meeting).Where("id = ?", meeting.ID).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return meeting, nil
+}
+
+func (r *MeetingRepository) DeleteMeeting(ctx context.Context, meetingId uint32) error {
+	_, err := r.db.NewDelete().Model((*model.Meeting)(nil)).Where("id = ?", meetingId).Exec(ctx)
+	return err
+}
+
+/*
+MeetingWithVotes 조회
+*/
+func (r *MeetingRepository) GetMeetingWithVotesByInviteCode(ctx context.Context, inviteCode string) (*model.MeetingWithVotes, error) {
+	var meeting model.Meeting
+	err := r.db.NewSelect().Model(&meeting).Where("invite_code = ?", inviteCode).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var votes []*model.Vote
+	err = r.db.NewSelect().Model(&votes).Where("meeting_id = ?", meeting.ID).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.MeetingWithVotes{
+		Meeting: &meeting,
+		Votes:   votes,
+	}, nil
+}
+
+func (r *MeetingRepository) GetMeetingByInviteCode(ctx context.Context, inviteCode string) (*model.Meeting, error) {
+	var meeting model.Meeting
+	err := r.db.NewSelect().Model(&meeting).Where("invite_code = ?", inviteCode).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &meeting, nil
+}
+
+func (r *MeetingRepository) GetVotesByMeetingId(ctx context.Context, meetingId uint32) ([]*model.Vote, error) {
+	var votes []*model.Vote
+	err := r.db.NewSelect().Model(&votes).Where("meeting_id = ?", meetingId).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return votes, nil
+}
+
+func (r *MeetingRepository) FindPendingJoinRequest(ctx context.Context, meetingId uint32, requesterId string) (*model.JoinRequest, error) {
+	var req model.JoinRequest
+	err := r.db.NewSelect().
+		Model(&req).
+		Where("meeting_id = ?", meetingId).
+		Where("requester_id = ?", requesterId).
+		Where("status = ?", "pending").
+		Order("id DESC").
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &req, nil
+}
+
+func (r *MeetingRepository) CreateJoinRequest(ctx context.Context, req *model.JoinRequest) (*model.JoinRequest, error) {
+	_, err := r.db.NewInsert().Model(req).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (r *MeetingRepository) GetJoinRequestsByMeetingID(ctx context.Context, meetingId uint32) ([]*model.JoinRequest, error) {
+	var requests []*model.JoinRequest
+	err := r.db.NewSelect().
+		Model(&requests).
+		Where("meeting_id = ?", meetingId).
+		Order("created_at DESC").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
+func (r *MeetingRepository) GetJoinRequestByID(ctx context.Context, requestId uint32) (*model.JoinRequest, error) {
+	var request model.JoinRequest
+	err := r.db.NewSelect().Model(&request).Where("id = ?", requestId).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &request, nil
+}
+
+func (r *MeetingRepository) UpdateJoinRequest(ctx context.Context, request *model.JoinRequest) error {
+	_, err := r.db.NewUpdate().
+		Model(request).
+		Column("status", "participant_code", "processed_by").
+		Set("updated_at = NOW()").
+		WherePK().
+		Exec(ctx)
+	return err
+}
+
+func (r *MeetingRepository) UpsertApprovedParticipant(
+	ctx context.Context,
+	meetingId uint32,
+	requesterId string,
+	requesterName string,
+	participantCode string,
+	approvedBy string,
+) (*model.MeetingParticipant, error) {
+	participant := &model.MeetingParticipant{
+		MeetingId:       meetingId,
+		RequesterId:     requesterId,
+		RequesterName:   requesterName,
+		ParticipantCode: participantCode,
+		Status:          "active",
+		ApprovedBy:      approvedBy,
+	}
+
+	_, err := r.db.NewInsert().
+		Model(participant).
+		On("CONFLICT (meeting_id, requester_id) DO UPDATE").
+		Set("requester_name = EXCLUDED.requester_name").
+		Set("participant_code = EXCLUDED.participant_code").
+		Set("status = 'active'").
+		Set("approved_by = EXCLUDED.approved_by").
+		Set("updated_at = NOW()").
+		Returning("*").
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return participant, nil
+}
+
+func (r *MeetingRepository) GetActiveParticipantByCode(ctx context.Context, meetingId uint32, participantCode string) (*model.MeetingParticipant, error) {
+	var participant model.MeetingParticipant
+	err := r.db.NewSelect().
+		Model(&participant).
+		Where("meeting_id = ?", meetingId).
+		Where("participant_code = ?", participantCode).
+		Where("status = ?", "active").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &participant, nil
+}

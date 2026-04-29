@@ -55,7 +55,7 @@ type createMeetingRequest struct {
 	Location    string   `json:"location" binding:"omitempty,max=100"`
 	StartTime   string   `json:"startTime" binding:"required,start_time"`
 	EndTime     string   `json:"endTime" binding:"required,end_time"`
-	Dates       []string `json:"dates" binding:"required,min=1,max=10"`
+	Dates       []string `json:"dates" binding:"required,min=1,max=14"`
 	JoinPolicy  string   `json:"joinPolicy" binding:"omitempty,oneof=auto approval"`
 }
 
@@ -92,7 +92,7 @@ func (h *MeetingHandler) CreateMeeting(c *gin.Context) {
 
 	meeting, err := h.service.CreateMeeting(c.Request.Context(), in)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeServiceError(c, err)
 		return
 	}
 
@@ -166,15 +166,14 @@ func (h *MeetingHandler) UpdateMeeting(c *gin.Context) {
 		HostId:      c.GetString("userId"),
 	}
 
-	meetingIdUint, err := strconv.ParseUint(meetingId, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	meetingIdUint, ok := parseUint32Param(c, "meetingId")
+	if !ok {
 		return
 	}
 
-	_, err = h.service.UpdateMeeting(c.Request.Context(), uint32(meetingIdUint), in)
+	_, err := h.service.UpdateMeeting(c.Request.Context(), meetingIdUint, in)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeServiceError(c, err)
 		return
 	}
 
@@ -189,21 +188,20 @@ func (h *MeetingHandler) DeleteMeeting(c *gin.Context) {
 		return
 	}
 
-	hostID := c.GetHeader("X-User-Id")
+	hostID := c.GetString("userId")
 	if hostID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user header"})
 		return
 	}
 
-	meetingIdUint, err := strconv.ParseUint(meetingId, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	meetingIdUint, ok := parseUint32Param(c, "meetingId")
+	if !ok {
 		return
 	}
 
-	err = h.service.DeleteMeeting(c.Request.Context(), uint32(meetingIdUint), hostID)
+	err := h.service.DeleteMeeting(c.Request.Context(), meetingIdUint, hostID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeServiceError(c, err)
 		return
 	}
 
@@ -436,12 +434,18 @@ func parseUint32Param(c *gin.Context, name string) (uint32, bool) {
 func writeServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, gin.H{"code": "forbidden", "error": err.Error()})
 	case errors.Is(err, service.ErrNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": err.Error()})
 	case errors.Is(err, service.ErrInvalidState):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_state", "error": err.Error()})
+	case errors.Is(err, service.ErrInvalidInput):
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_input", "error": err.Error()})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":   "internal_error",
+			"error":  "internal server error",
+			"detail": err.Error(),
+		})
 	}
 }

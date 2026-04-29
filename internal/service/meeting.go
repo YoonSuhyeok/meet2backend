@@ -62,6 +62,7 @@ var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrNotFound     = errors.New("not found")
 	ErrInvalidState = errors.New("invalid state")
+	ErrInvalidInput = errors.New("invalid input")
 )
 
 func NewMeetingService(repository *repository.MeetingRepository) *MeetingService {
@@ -70,23 +71,23 @@ func NewMeetingService(repository *repository.MeetingRepository) *MeetingService
 
 func (s *MeetingService) CreateMeeting(ctx context.Context, in CreateMeetingInput) (*model.Meeting, error) {
 	// startTime <= endTime 검증 및 날짜 형식 검증
-	start, err := time.Parse("15:04", in.StartTime)
+	startMinutes, err := parseTimeMinutes(in.StartTime, false)
 	if err != nil {
-		return nil, fmt.Errorf("invalid start time: %w", err)
+		return nil, fmt.Errorf("%w: invalid start time: %v", ErrInvalidInput, err)
 	}
-	end, err := time.Parse("15:04", in.EndTime)
+	endMinutes, err := parseTimeMinutes(in.EndTime, true)
 	if err != nil {
-		return nil, fmt.Errorf("invalid end time: %w", err)
+		return nil, fmt.Errorf("%w: invalid end time: %v", ErrInvalidInput, err)
 	}
-	if !start.Before(end) {
-		return nil, fmt.Errorf("start time must be before end time")
+	if startMinutes >= endMinutes {
+		return nil, fmt.Errorf("%w: start time must be before end time", ErrInvalidInput)
 	}
 
 	parsedDates := make([]time.Time, 0, len(in.Dates))
 	for _, d := range in.Dates {
 		t, err := time.Parse("2006-01-02", d)
 		if err != nil {
-			return nil, fmt.Errorf("invalid date: %s", d)
+			return nil, fmt.Errorf("%w: invalid date: %s", ErrInvalidInput, d)
 		}
 		parsedDates = append(parsedDates, t)
 	}
@@ -112,12 +113,15 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, meetingId uint32, in
 	// meetingId로 미팅 존재 여부 확인
 	existing, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {
-		return nil, fmt.Errorf("meeting not found: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
 
 	// 주최자 검증 (HostId 비교)
 	if existing.HostId != in.HostId {
-		return nil, fmt.Errorf("only the host can update the meeting")
+		return nil, ErrForbidden
 	}
 
 	// 업데이트할 필드만 업데이트
@@ -131,20 +135,28 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, meetingId uint32, in
 		existing.Location = in.Location
 	}
 
-	// 모든 필드 업데이트 유무에 따라 업데이트 진행
-	if in.StartTime != "" || in.EndTime != "" {
-		start, err := time.Parse("15:04", in.StartTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start time: %w", err)
-		}
-		end, err := time.Parse("15:04", in.EndTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end time: %w", err)
-		}
-		if !start.Before(end) {
-			return nil, fmt.Errorf("start time must be before end time")
-		}
+	startTime := existing.StartTime
+	if in.StartTime != "" {
+		startTime = in.StartTime
 	}
+	endTime := existing.EndTime
+	if in.EndTime != "" {
+		endTime = in.EndTime
+	}
+
+	startMinutes, err := parseTimeMinutes(startTime, false)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid start time: %v", ErrInvalidInput, err)
+	}
+	endMinutes, err := parseTimeMinutes(endTime, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid end time: %v", ErrInvalidInput, err)
+	}
+	if startMinutes >= endMinutes {
+		return nil, fmt.Errorf("%w: start time must be before end time", ErrInvalidInput)
+	}
+	existing.StartTime = startTime
+	existing.EndTime = endTime
 
 	var parsedDates []time.Time
 
@@ -152,36 +164,29 @@ func (s *MeetingService) UpdateMeeting(ctx context.Context, meetingId uint32, in
 		for _, d := range in.Dates {
 			t, err := time.Parse("2006-01-02", d)
 			if err != nil {
-				return nil, fmt.Errorf("invalid date: %s", d)
+				return nil, fmt.Errorf("%w: invalid date: %s", ErrInvalidInput, d)
 			}
 			parsedDates = append(parsedDates, t)
 		}
 		existing.Dates = parsedDates
 	}
 
-	meeting := &model.Meeting{
-		ID:          meetingId,
-		Title:       in.Title,
-		Description: in.Description,
-		Location:    in.Location,
-		StartTime:   in.StartTime,
-		EndTime:     in.EndTime,
-		Dates:       parsedDates,
-	}
-
-	return s.repository.UpdateMeeting(ctx, meeting)
+	return s.repository.UpdateMeeting(ctx, existing)
 }
 
 func (s *MeetingService) DeleteMeeting(ctx context.Context, meetingId uint32, hostId string) error {
 	// meetingId로 미팅 존재 여부 확인
 	existing, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {
-		return fmt.Errorf("meeting not found: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
 	}
 
 	// 주최자 검증 (HostId 비교)
 	if existing.HostId != hostId {
-		return fmt.Errorf("only the host can delete the meeting")
+		return ErrForbidden
 	}
 
 	return s.repository.DeleteMeeting(ctx, meetingId)
@@ -271,7 +276,7 @@ func (s *MeetingService) CreateJoinRequestByInviteCode(ctx context.Context, in J
 	requesterId := strings.TrimSpace(in.RequesterId)
 	requesterName := strings.TrimSpace(in.RequesterName)
 	if requesterId == "" || requesterName == "" {
-		return nil, fmt.Errorf("requester id/name are required")
+		return nil, fmt.Errorf("%w: requester id/name are required", ErrInvalidInput)
 	}
 
 	meeting, err := s.repository.GetMeetingByInviteCode(ctx, strings.TrimSpace(in.InviteCode))
@@ -472,6 +477,22 @@ func randomParticipantCode() string {
 		out[i] = upperNum[v.Int64()]
 	}
 	return string(out)
+}
+
+func parseTimeMinutes(value string, allow24 bool) (int, error) {
+	if value == "24:00" {
+		if allow24 {
+			return 24 * 60, nil
+		}
+		return 0, fmt.Errorf("24:00 is not allowed")
+	}
+
+	t, err := time.Parse("15:04", value)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.Hour()*60 + t.Minute(), nil
 }
 
 func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []string, participantCode string, hostId string) error {

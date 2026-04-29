@@ -28,6 +28,8 @@ func Auth() gin.HandlerFunc {
 
 		c.Set("userId", userId)
 		c.Set("userName", userName)
+		// "member" | "guest"
+		c.Set("userKind", c.GetHeader("X-User-Kind"))
 		c.Next()
 	}
 }

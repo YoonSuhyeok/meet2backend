@@ -226,3 +226,48 @@ func (r *MeetingRepository) GetActiveParticipantByCode(ctx context.Context, meet
 
 	return &participant, nil
 }
+
+func (r *MeetingRepository) SubmitVotes(ctx context.Context,
+	meetingId uint32,
+	selectedSlots []string,
+	participantCode string) error {
+	// 트랜잭션 시작
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 기존 투표 삭제
+	_, err = tx.NewDelete().Model((*model.Vote)(nil)).
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", participantCode).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+
+	// 새로운 투표 삽입
+	for _, slot := range selectedSlots {
+		vote := &model.Vote{
+			MeetingId: meetingId,
+			UserId:    participantCode,
+			UserName:  participantCode,
+			Slots:     []string{slot},
+		}
+		_, err := tx.NewInsert().Model(vote).Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (r *MeetingRepository) DeleteVotes(ctx context.Context, meetingId uint32, participantCode string) error {
+	_, err := r.db.NewDelete().Model((*model.Vote)(nil)).
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", participantCode).
+		Exec(ctx)
+	return err
+}

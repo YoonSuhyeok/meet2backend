@@ -473,3 +473,61 @@ func randomParticipantCode() string {
 	}
 	return string(out)
 }
+
+func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []string, participantCode string, hostId string) error {
+	meeting, err := s.repository.GetMeetingById(context.Background(), meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	if hostId != "" && hostId == meeting.HostId {
+		return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode)
+	}
+
+	participantCode = strings.TrimSpace(participantCode)
+	if participantCode == "" {
+		return ErrForbidden
+	}
+
+	_, valid, err := s.VerifyParticipantCode(context.Background(), meetingId, participantCode)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return ErrForbidden
+	}
+
+	return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode)
+}
+
+func (s *MeetingService) DeleteVotesRequest(meetingId uint32, participantCode string, hostId string) error {
+	meeting, err := s.repository.GetMeetingById(context.Background(), meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	if hostId != "" && hostId == meeting.HostId {
+		return s.repository.DeleteVotes(context.Background(), meetingId, participantCode)
+	}
+
+	participantCode = strings.TrimSpace(participantCode)
+	if participantCode == "" {
+		return ErrForbidden
+	}
+
+	_, valid, err := s.VerifyParticipantCode(context.Background(), meetingId, participantCode)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return ErrForbidden
+	}
+
+	return s.repository.DeleteVotes(context.Background(), meetingId, participantCode)
+}

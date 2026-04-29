@@ -34,10 +34,10 @@ func main() {
 	validator.RegisterValidators()
 
 	router.Register(
-		r
-		, healthHandler
-		, meetingHandler
-		, voteHandler)
+		r,
+		healthHandler,
+		meetingHandler,
+		voteHandler)
 
 	if err := r.Run(":" + cfg.AppPort); err != nil {
 		log.Fatalf("run gin server: %v", err)

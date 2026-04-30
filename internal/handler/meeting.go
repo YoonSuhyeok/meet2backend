@@ -100,19 +100,13 @@ func (h *MeetingHandler) CreateMeeting(c *gin.Context) {
 }
 
 func (h *MeetingHandler) GetMeetings(c *gin.Context) {
-	var req meetingRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	limit, err := strconv.ParseUint(req.Limit, 10, 32)
+	limit, err := strconv.ParseUint(c.DefaultQuery("limit", "20"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
 		return
 	}
 
-	meetings, nextCursor, err := h.service.GetMeetings(c.Request.Context(), req.Cursor, uint32(limit))
+	meetings, nextCursor, err := h.service.GetMeetings(c.Request.Context(), c.Query("cursor"), uint32(limit))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -122,6 +116,28 @@ func (h *MeetingHandler) GetMeetings(c *gin.Context) {
 		"meetings":   meetings,
 		"nextCursor": nextCursor,
 	})
+}
+
+func (h *MeetingHandler) GetMeetingById(c *gin.Context) {
+	meetingId := c.Param("meetingId")
+	// meetingId가 uint로 변환 가능한지 검증
+	if _, err := strconv.ParseUint(meetingId, 10, 32); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid meetingId"})
+		return
+	}
+
+	meetingIdUint, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	meeting, err := h.service.GetMeetingById(c.Request.Context(), meetingIdUint)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, meeting)
 }
 
 type updateMeetingRequest struct {

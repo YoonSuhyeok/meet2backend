@@ -19,6 +19,7 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.Use(middleware.Auth())
 	auth.POST("/meetings", h.CreateMeeting)
 	auth.GET("/meetings", h.GetMeetings)
+	auth.GET("/meetings/:meetingId", h.GetMeetingById)
 	auth.PATCH("/meetings/:meetingId", h.UpdateMeeting)
 	auth.DELETE("/meetings/:meetingId", h.DeleteMeeting)
 	auth.GET("/meetings/:meetingId/join-requests", h.ListJoinRequests)

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"meetBack/internal/model"
 	"meetBack/internal/repository"
@@ -196,6 +197,18 @@ func (s *MeetingService) GetMeetings(ctx context.Context, cursor string, limit u
 	return s.repository.GetMeetings(ctx, cursor, limit)
 }
 
+func (s *MeetingService) GetMeetingById(ctx context.Context, meetingId uint32) (*model.Meeting, error) {
+	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return meeting, nil
+}
+
 var alphaNum = []rune("abcdefghijklmnopqrstuvwxyz0123456789")
 var upperNum = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
@@ -247,27 +260,38 @@ func (s *MeetingService) GetVotesByMeetingIdAuthorized(ctx context.Context, meet
 	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			log.Printf("[votes:auth] meetingId=%d not_found", meetingId)
 			return nil, ErrNotFound
 		}
+		log.Printf("[votes:auth] meetingId=%d load_meeting_failed err=%v", meetingId, err)
 		return nil, err
 	}
 
 	if hostId != "" && hostId == meeting.HostId {
+		log.Printf("[votes:auth] meetingId=%d access=host", meetingId)
 		return s.repository.GetVotesByMeetingId(ctx, meetingId)
 	}
 
 	participantCode = strings.TrimSpace(participantCode)
 	if participantCode == "" {
+		log.Printf(
+			"[votes:auth] meetingId=%d access=denied reason=missing_participant_code host_id_set=%t",
+			meetingId,
+			strings.TrimSpace(hostId) != "",
+		)
 		return nil, ErrForbidden
 	}
 
 	_, valid, err := s.VerifyParticipantCode(ctx, meetingId, participantCode)
 	if err != nil {
+		log.Printf("[votes:auth] meetingId=%d verify_participant_code_failed err=%v", meetingId, err)
 		return nil, err
 	}
 	if !valid {
+		log.Printf("[votes:auth] meetingId=%d access=denied reason=invalid_participant_code", meetingId)
 		return nil, ErrForbidden
 	}
+	log.Printf("[votes:auth] meetingId=%d access=participant_code", meetingId)
 
 	return s.repository.GetVotesByMeetingId(ctx, meetingId)
 }

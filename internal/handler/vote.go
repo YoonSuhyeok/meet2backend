@@ -2,9 +2,11 @@ package handler
 
 import (
 	"errors"
+	"log"
 	"meetBack/internal/service"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,15 +24,23 @@ func (h *VoteHandler) GetVotes(c *gin.Context) {
 	// uint32로 변환
 	meetingId, err := strconv.ParseUint(meetingIdStr, 10, 32)
 	if err != nil {
+		log.Printf("[votes:get] invalid meetingId=%q", meetingIdStr)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid meeting ID"})
 		return
 	}
 
 	participantCode := c.Query("participantCode")
 	hostID := c.GetHeader("X-User-Id")
+	log.Printf(
+		"[votes:get] request meetingId=%d x_user_id_set=%t participant_code_set=%t",
+		meetingId,
+		strings.TrimSpace(hostID) != "",
+		strings.TrimSpace(participantCode) != "",
+	)
 
 	votes, err := h.service.GetVotesByMeetingIdAuthorized(c.Request.Context(), uint32(meetingId), participantCode, hostID)
 	if err != nil {
+		log.Printf("[votes:get] denied meetingId=%d reason=%v", meetingId, err)
 		switch {
 		case errors.Is(err, service.ErrForbidden):
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -41,6 +51,7 @@ func (h *VoteHandler) GetVotes(c *gin.Context) {
 		}
 		return
 	}
+	log.Printf("[votes:get] success meetingId=%d vote_count=%d", meetingId, len(votes))
 
 	c.JSON(http.StatusOK, gin.H{"votes": votes})
 }

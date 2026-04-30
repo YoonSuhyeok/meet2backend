@@ -3,9 +3,11 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
+	"meetBack/internal/model"
 	"meetBack/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -229,21 +231,27 @@ type timeRange struct {
 	EndTime   string `json:"endTime"`
 }
 
+type slotSummary struct {
+	Slot  string `json:"slot"`
+	Count int    `json:"count"`
+}
+
 type meetingWithVotesResponse struct {
-	CreatedAt        time.Time   `json:"createdAt"`
-	Dates            []time.Time `json:"dates"`
-	Description      string      `json:"description"`
-	HostId           string      `json:"hostId"`
-	HostName         string      `json:"hostName"`
-	Id               uint32      `json:"id"`
-	InviteCode       string      `json:"inviteCode"`
-	InvitePolicy     string      `json:"invitePolicy"`
-	Location         string      `json:"location"`
-	ParticipantCount int         `json:"participantCount"`
-	ShortId          string      `json:"shortId"`
-	TimeRange        timeRange   `json:"timeRange"`
-	Title            string      `json:"title"`
-	UpdatedAt        time.Time   `json:"updatedAt"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	Dates            []time.Time   `json:"dates"`
+	Description      string        `json:"description"`
+	HostId           string        `json:"hostId"`
+	HostName         string        `json:"hostName"`
+	Id               uint32        `json:"id"`
+	InviteCode       string        `json:"inviteCode"`
+	InvitePolicy     string        `json:"invitePolicy"`
+	Location         string        `json:"location"`
+	ParticipantCount int           `json:"participantCount"`
+	ShortId          string        `json:"shortId"`
+	TimeRange        timeRange     `json:"timeRange"`
+	Title            string        `json:"title"`
+	UpdatedAt        time.Time     `json:"updatedAt"`
+	VoteSummary      []slotSummary `json:"voteSummary"`
 }
 
 func (h *MeetingHandler) GetMeetingByInviteCode(c *gin.Context) {
@@ -282,8 +290,9 @@ func (h *MeetingHandler) GetMeetingByInviteCode(c *gin.Context) {
 			StartTime: meeting.StartTime,
 			EndTime:   meeting.EndTime,
 		},
-		Title:     meeting.Title,
-		UpdatedAt: meeting.UpdatedAt,
+		Title:       meeting.Title,
+		UpdatedAt:   meeting.UpdatedAt,
+		VoteSummary: buildSlotSummary(votes),
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -434,7 +443,82 @@ func validateInviteCode(code string) bool {
 }
 
 func (h *MeetingHandler) GetMeetingByShortId(c *gin.Context) {
+	shortId := c.Param("shortId")
+	if !validateShortId(shortId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid shortId format"})
+		return
+	}
 
+	meeting, err := h.service.GetMeetingByShortId(c.Request.Context(), shortId)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	votes, err := h.service.GetVotesByMeetingId(c.Request.Context(), meeting.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	response := meetingWithVotesResponse{
+		CreatedAt:        meeting.CreatedAt,
+		Dates:            meeting.Dates,
+		Description:      meeting.Description,
+		HostId:           meeting.HostId,
+		HostName:         meeting.HostName,
+		Id:               meeting.ID,
+		InviteCode:       meeting.InviteCode,
+		InvitePolicy:     meeting.InvitePolicy,
+		Location:         meeting.Location,
+		ParticipantCount: len(votes),
+		ShortId:          meeting.ShortId,
+		TimeRange: timeRange{
+			StartTime: meeting.StartTime,
+			EndTime:   meeting.EndTime,
+		},
+		Title:       meeting.Title,
+		UpdatedAt:   meeting.UpdatedAt,
+		VoteSummary: buildSlotSummary(votes),
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func validateShortId(shortId string) bool {
+	if len(shortId) < 6 || len(shortId) > 10 {
+		return false
+	}
+
+	for _, r := range shortId {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+
+	return true
+}
+
+func buildSlotSummary(votes []*model.Vote) []slotSummary {
+	countBySlot := make(map[string]int)
+	for _, vote := range votes {
+		for _, slot := range vote.Slots {
+			countBySlot[slot]++
+		}
+	}
+
+	slots := make([]string, 0, len(countBySlot))
+	for slot := range countBySlot {
+		slots = append(slots, slot)
+	}
+	sort.Strings(slots)
+
+	summary := make([]slotSummary, 0, len(slots))
+	for _, slot := range slots {
+		summary = append(summary, slotSummary{Slot: slot, Count: countBySlot[slot]})
+	}
+
+	return summary
 }
 
 func parseUint32Param(c *gin.Context, name string) (uint32, bool) {

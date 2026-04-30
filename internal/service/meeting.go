@@ -247,6 +247,18 @@ func (s *MeetingService) GetMeetingByInviteCode(ctx context.Context, inviteCode 
 	return meeting, nil
 }
 
+func (s *MeetingService) GetMeetingByShortId(ctx context.Context, shortId string) (*model.Meeting, error) {
+	meeting, err := s.repository.GetMeetingByShortId(ctx, shortId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return meeting, nil
+}
+
 func (s *MeetingService) GetVotesByMeetingId(ctx context.Context, meetingId uint32) ([]*model.Vote, error) {
 	votes, err := s.repository.GetVotesByMeetingId(ctx, meetingId)
 	if err != nil {

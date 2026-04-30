@@ -105,6 +105,16 @@ func (r *MeetingRepository) GetMeetingByInviteCode(ctx context.Context, inviteCo
 	return &meeting, nil
 }
 
+func (r *MeetingRepository) GetMeetingByShortId(ctx context.Context, shortId string) (*model.Meeting, error) {
+	var meeting model.Meeting
+	err := r.db.NewSelect().Model(&meeting).Where("short_id = ?", shortId).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &meeting, nil
+}
+
 func (r *MeetingRepository) GetVotesByMeetingId(ctx context.Context, meetingId uint32) ([]*model.Vote, error) {
 	var votes []*model.Vote
 	err := r.db.NewSelect().Model(&votes).Where("meeting_id = ?", meetingId).Scan(ctx)

@@ -4,7 +4,7 @@ services:
     container_name: meetback-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-25432}:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-meetback}
       POSTGRES_USER: ${DB_USER:-postgres}

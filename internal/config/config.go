@@ -21,7 +21,7 @@ func Load() Config {
 	return Config{
 		AppPort:     envOrDefault("APP_PORT", "8080"),
 		DBHost:      envOrDefault("DB_HOST", "localhost"),
-		DBPort:      envOrDefault("DB_PORT", "5432"),
+		DBPort:      envOrDefault("DB_PORT", "25432"),
 		DBUser:      envOrDefault("DB_USER", "postgres"),
 		DBPassword:  envOrDefault("DB_PASSWORD", "postgres"),
 		DBName:      envOrDefault("DB_NAME", "meetback"),

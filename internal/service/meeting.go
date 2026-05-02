@@ -531,7 +531,7 @@ func parseTimeMinutes(value string, allow24 bool) (int, error) {
 	return t.Hour()*60 + t.Minute(), nil
 }
 
-func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []string, participantCode string, hostId string) error {
+func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []string, participantCode string, hostId string, hostName string) error {
 	meeting, err := s.repository.GetMeetingById(context.Background(), meetingId)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -540,24 +540,35 @@ func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []st
 		return err
 	}
 
-	if hostId != "" && hostId == meeting.HostId {
-		return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode)
-	}
-
 	participantCode = strings.TrimSpace(participantCode)
-	if participantCode == "" {
-		return ErrForbidden
+	hostId = strings.TrimSpace(hostId)
+	hostName = strings.TrimSpace(hostName)
+
+	if hostId != "" && hostId == meeting.HostId {
+		participantKey := participantCode
+		if participantKey == "" {
+			participantKey = hostId
+		}
+		return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantKey, hostName)
 	}
 
-	_, valid, err := s.VerifyParticipantCode(context.Background(), meetingId, participantCode)
-	if err != nil {
-		return err
-	}
-	if !valid {
-		return ErrForbidden
+	// participantCode가 있으면 기존 승인 코드 경로를 우선 사용
+	if participantCode != "" {
+		_, valid, err := s.VerifyParticipantCode(context.Background(), meetingId, participantCode)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return ErrForbidden
+		}
+		return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode, hostName)
 	}
 
-	return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode)
+	// 로그인 사용자라면 participantCode 없이도 userId 기준으로 투표 저장 허용
+	if hostId == "" {
+		return ErrForbidden
+	}
+	return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, hostId, hostName)
 }
 
 func (s *MeetingService) DeleteVotesRequest(meetingId uint32, participantCode string, hostId string) error {

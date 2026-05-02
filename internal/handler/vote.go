@@ -78,8 +78,9 @@ func (h *VoteHandler) SubmitVotes(c *gin.Context) {
 
 	participantCode := c.Query("participantCode")
 	hostID := c.GetHeader("X-User-Id")
+	hostName := c.GetString("userName")
 
-	err = h.service.SubmitVotesRequest(uint32(meetingId), req.Slots, participantCode, hostID)
+	err = h.service.SubmitVotesRequest(uint32(meetingId), req.Slots, participantCode, hostID, hostName)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrForbidden):

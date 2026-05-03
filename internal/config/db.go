@@ -35,6 +35,8 @@ func ensureSchema(db *sql.DB) error {
 	defer cancel()
 
 	stmts := []string{
+		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS final_slot VARCHAR(16)",
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_by VARCHAR(64)",
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ",

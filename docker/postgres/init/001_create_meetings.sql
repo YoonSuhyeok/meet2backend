@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS meetings (
     start_time       VARCHAR(5)   NOT NULL,
     end_time         VARCHAR(5)   NOT NULL,
 
+    -- 투표 상태
+    is_closed        BOOLEAN      NOT NULL DEFAULT FALSE,
+    closed_at        TIMESTAMPTZ,
+
     -- 호스트 최종 확정 슬롯 (선택 사항)
     final_slot       VARCHAR(16),
     finalized_by     VARCHAR(64),

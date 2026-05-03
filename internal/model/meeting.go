@@ -18,12 +18,15 @@ type Meeting struct {
 	Description string `bun:"description" json:"description"`
 	Location    string `bun:"location" json:"location"`
 
-	Dates     []time.Time `bun:"dates,array" json:"dates"`
-	StartTime string      `bun:"start_time" json:"startTime"`
-	EndTime   string      `bun:"end_time" json:"endTime"`
-	FinalSlot string      `bun:"final_slot,nullzero" json:"finalSlot,omitempty"`
-	FinalizedBy string    `bun:"finalized_by,nullzero" json:"finalizedBy,omitempty"`
-	FinalizedAt *time.Time `bun:"finalized_at,nullzero" json:"finalizedAt,omitempty"`
+	Dates            []time.Time `bun:"dates,array" json:"dates"`
+	StartTime        string      `bun:"start_time" json:"startTime"`
+	EndTime          string      `bun:"end_time" json:"endTime"`
+	IsClosed         bool        `bun:"is_closed,notnull,default:false" json:"isClosed"`
+	ClosedAt         *time.Time  `bun:"closed_at,nullzero" json:"closedAt,omitempty"`
+	FinalSlot        string      `bun:"final_slot,nullzero" json:"finalSlot,omitempty"`
+	FinalizedBy      string      `bun:"finalized_by,nullzero" json:"finalizedBy,omitempty"`
+	FinalizedAt      *time.Time  `bun:"finalized_at,nullzero" json:"finalizedAt,omitempty"`
+	ParticipantCount int         `bun:"participant_count,scanonly" json:"participantCount"`
 
 	HostId   string `bun:"host_id,notnull" json:"hostId"`
 	HostName string `bun:"host_name,notnull" json:"hostName"`

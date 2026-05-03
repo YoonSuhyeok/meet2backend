@@ -246,6 +246,8 @@ type meetingWithVotesResponse struct {
 	CreatedAt        time.Time     `json:"createdAt"`
 	Dates            []time.Time   `json:"dates"`
 	Description      string        `json:"description"`
+	IsClosed         bool          `json:"isClosed"`
+	ClosedAt         *time.Time    `json:"closedAt,omitempty"`
 	FinalSlot        string        `json:"finalSlot,omitempty"`
 	FinalizedAt      *time.Time    `json:"finalizedAt,omitempty"`
 	FinalizedBy      string        `json:"finalizedBy,omitempty"`
@@ -265,6 +267,16 @@ type meetingWithVotesResponse struct {
 
 type finalizeMeetingRequest struct {
 	Slot string `json:"slot" binding:"required"`
+}
+
+type updateMeetingStatusRequest struct {
+	IsClosed bool `json:"isClosed"`
+}
+
+type meetingStatusResponse struct {
+	MeetingId uint32     `json:"meetingId"`
+	IsClosed  bool       `json:"isClosed"`
+	ClosedAt  *time.Time `json:"closedAt,omitempty"`
 }
 
 type meetingFinalResponse struct {
@@ -527,6 +539,32 @@ func (h *MeetingHandler) ClearMeetingFinal(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *MeetingHandler) UpdateMeetingStatus(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	var req updateMeetingStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	hostID := c.GetString("userId")
+	result, err := h.service.SetMeetingClosed(c.Request.Context(), meetingId, hostID, req.IsClosed)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, meetingStatusResponse{
+		MeetingId: result.MeetingId,
+		IsClosed:  result.IsClosed,
+		ClosedAt:  result.ClosedAt,
+	})
+}
+
 func validateShortId(shortId string) bool {
 	if len(shortId) < 6 || len(shortId) > 10 {
 		return false
@@ -568,6 +606,8 @@ func buildMeetingWithVotesResponse(meeting *model.Meeting, votes []*model.Vote) 
 		CreatedAt:        meeting.CreatedAt,
 		Dates:            meeting.Dates,
 		Description:      meeting.Description,
+		IsClosed:         meeting.IsClosed,
+		ClosedAt:         meeting.ClosedAt,
 		FinalSlot:        meeting.FinalSlot,
 		FinalizedAt:      meeting.FinalizedAt,
 		FinalizedBy:      meeting.FinalizedBy,

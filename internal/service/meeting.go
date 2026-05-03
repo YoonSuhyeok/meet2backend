@@ -70,6 +70,12 @@ type MeetingFinalResult struct {
 	FinalizedAt time.Time
 }
 
+type MeetingStatusResult struct {
+	MeetingId uint32
+	IsClosed  bool
+	ClosedAt  *time.Time
+}
+
 var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrNotFound     = errors.New("not found")
@@ -701,6 +707,35 @@ func (s *MeetingService) ClearMeetingFinal(
 	}
 
 	return s.repository.ClearMeetingFinalization(ctx, meetingId)
+}
+
+func (s *MeetingService) SetMeetingClosed(
+	ctx context.Context,
+	meetingId uint32,
+	hostId string,
+	isClosed bool,
+) (*MeetingStatusResult, error) {
+	if _, err := s.ensureHostOfMeeting(ctx, meetingId, hostId); err != nil {
+		return nil, err
+	}
+
+	if err := s.repository.SetMeetingClosed(ctx, meetingId, isClosed); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &MeetingStatusResult{
+		MeetingId: updated.ID,
+		IsClosed:  updated.IsClosed,
+		ClosedAt:  updated.ClosedAt,
+	}, nil
 }
 
 func validateFinalSlot(slot string, meeting *model.Meeting) error {

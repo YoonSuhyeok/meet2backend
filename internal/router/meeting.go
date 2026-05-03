@@ -21,6 +21,7 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.POST("/meetings", h.CreateMeeting)
 	auth.GET("/meetings", h.GetMeetings)
 	auth.GET("/meetings/:meetingId", h.GetMeetingById)
+	auth.PATCH("/meetings/:meetingId/status", h.UpdateMeetingStatus)
 	auth.POST("/meetings/:meetingId/finalize", h.FinalizeMeeting)
 	auth.DELETE("/meetings/:meetingId/finalize", h.ClearMeetingFinal)
 	auth.PATCH("/meetings/:meetingId", h.UpdateMeeting)

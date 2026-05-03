@@ -39,10 +39,16 @@ func (r *MeetingRepository) GetMeetingById(ctx context.Context, id uint32) (*mod
 func (r *MeetingRepository) GetMeetings(ctx context.Context, cursor string, limit uint32) ([]*model.Meeting, string, error) {
 	var meetings []*model.Meeting
 
-	query := r.db.NewSelect().Model(&meetings).Order("id DESC").Limit(int(limit) + 1)
+	query := r.db.NewSelect().
+		Model(&meetings).
+		ColumnExpr("m.*").
+		ColumnExpr("COALESCE(v.vote_count, 0) AS participant_count").
+		Join("LEFT JOIN (SELECT meeting_id, COUNT(*) AS vote_count FROM votes GROUP BY meeting_id) AS v ON v.meeting_id = m.id").
+		Order("m.id DESC").
+		Limit(int(limit) + 1)
 
 	if cursor != "" {
-		query.Where("id < ?", cursor)
+		query.Where("m.id < ?", cursor)
 	}
 
 	err := query.Scan(ctx)
@@ -286,12 +292,35 @@ func (r *MeetingRepository) FinalizeMeeting(
 ) error {
 	_, err := r.db.NewUpdate().
 		Model((*model.Meeting)(nil)).
+		Set("is_closed = TRUE").
+		Set("closed_at = COALESCE(closed_at, NOW())").
 		Set("final_slot = ?", slot).
 		Set("finalized_by = ?", finalizedBy).
 		Set("finalized_at = NOW()").
 		Set("updated_at = NOW()").
 		Where("id = ?", meetingId).
 		Exec(ctx)
+	return err
+}
+
+func (r *MeetingRepository) SetMeetingClosed(
+	ctx context.Context,
+	meetingId uint32,
+	isClosed bool,
+) error {
+	query := r.db.NewUpdate().
+		Model((*model.Meeting)(nil)).
+		Set("is_closed = ?", isClosed).
+		Set("updated_at = NOW()").
+		Where("id = ?", meetingId)
+
+	if isClosed {
+		query = query.Set("closed_at = COALESCE(closed_at, NOW())")
+	} else {
+		query = query.Set("closed_at = NULL")
+	}
+
+	_, err := query.Exec(ctx)
 	return err
 }
 

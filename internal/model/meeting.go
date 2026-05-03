@@ -21,6 +21,9 @@ type Meeting struct {
 	Dates     []time.Time `bun:"dates,array" json:"dates"`
 	StartTime string      `bun:"start_time" json:"startTime"`
 	EndTime   string      `bun:"end_time" json:"endTime"`
+	FinalSlot string      `bun:"final_slot,nullzero" json:"finalSlot,omitempty"`
+	FinalizedBy string    `bun:"finalized_by,nullzero" json:"finalizedBy,omitempty"`
+	FinalizedAt *time.Time `bun:"finalized_at,nullzero" json:"finalizedAt,omitempty"`
 
 	HostId   string `bun:"host_id,notnull" json:"hostId"`
 	HostName string `bun:"host_name,notnull" json:"hostName"`

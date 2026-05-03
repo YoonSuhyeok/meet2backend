@@ -11,6 +11,7 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	// 공개 조회/참가 라우트
 	r.GET("/meetings/code/:inviteCode", h.GetMeetingByInviteCode)
 	r.GET("/meetings/s/:shortId", h.GetMeetingByShortId)
+	r.GET("/meetings/:meetingId/final", h.GetMeetingFinal)
 	r.POST("/meetings/code/:inviteCode/join-requests", h.CreateJoinRequest)
 	r.POST("/meetings/:meetingId/participant-codes/verify", h.VerifyParticipantCode)
 
@@ -20,6 +21,8 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.POST("/meetings", h.CreateMeeting)
 	auth.GET("/meetings", h.GetMeetings)
 	auth.GET("/meetings/:meetingId", h.GetMeetingById)
+	auth.POST("/meetings/:meetingId/finalize", h.FinalizeMeeting)
+	auth.DELETE("/meetings/:meetingId/finalize", h.ClearMeetingFinal)
 	auth.PATCH("/meetings/:meetingId", h.UpdateMeeting)
 	auth.DELETE("/meetings/:meetingId", h.DeleteMeeting)
 	auth.GET("/meetings/:meetingId/join-requests", h.ListJoinRequests)

@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS meetings (
     start_time       VARCHAR(5)   NOT NULL,
     end_time         VARCHAR(5)   NOT NULL,
 
+    -- 호스트 최종 확정 슬롯 (선택 사항)
+    final_slot       VARCHAR(16),
+    finalized_by     VARCHAR(64),
+    finalized_at     TIMESTAMPTZ,
+
     -- 주최자 (외부 ID, BFF가 X-User-* 헤더로 전달)
     host_id          VARCHAR(64)  NOT NULL,
     host_name        VARCHAR(50)  NOT NULL,

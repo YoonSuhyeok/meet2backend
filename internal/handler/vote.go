@@ -79,6 +79,9 @@ func (h *VoteHandler) SubmitVotes(c *gin.Context) {
 	participantCode := c.Query("participantCode")
 	hostID := c.GetHeader("X-User-Id")
 	hostName := c.GetString("userName")
+	if strings.TrimSpace(hostName) == "" {
+		hostName = strings.TrimSpace(c.GetHeader("X-Participant-Name"))
+	}
 
 	err = h.service.SubmitVotesRequest(uint32(meetingId), req.Slots, participantCode, hostID, hostName)
 	if err != nil {

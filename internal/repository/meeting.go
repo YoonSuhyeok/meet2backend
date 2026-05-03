@@ -278,6 +278,38 @@ func (r *MeetingRepository) DeleteVotes(ctx context.Context, meetingId uint32, p
 	return err
 }
 
+func (r *MeetingRepository) FinalizeMeeting(
+	ctx context.Context,
+	meetingId uint32,
+	slot string,
+	finalizedBy string,
+) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.Meeting)(nil)).
+		Set("final_slot = ?", slot).
+		Set("finalized_by = ?", finalizedBy).
+		Set("finalized_at = NOW()").
+		Set("updated_at = NOW()").
+		Where("id = ?", meetingId).
+		Exec(ctx)
+	return err
+}
+
+func (r *MeetingRepository) ClearMeetingFinalization(
+	ctx context.Context,
+	meetingId uint32,
+) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.Meeting)(nil)).
+		Set("final_slot = NULL").
+		Set("finalized_by = NULL").
+		Set("finalized_at = NULL").
+		Set("updated_at = NOW()").
+		Where("id = ?", meetingId).
+		Exec(ctx)
+	return err
+}
+
 func (r *MeetingRepository) AddPushSubscription(
 	ctx context.Context,
 	meetingId uint32,

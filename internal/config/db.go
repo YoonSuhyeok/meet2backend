@@ -22,5 +22,29 @@ func OpenDB(cfg Config) (*bun.DB, error) {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
+	if err := ensureSchema(sqlDB); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("ensure schema: %w", err)
+	}
+
 	return bun.NewDB(sqlDB, pgdialect.New()), nil
+}
+
+func ensureSchema(db *sql.DB) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stmts := []string{
+		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS final_slot VARCHAR(16)",
+		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_by VARCHAR(64)",
+		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ",
+	}
+
+	for _, stmt := range stmts {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

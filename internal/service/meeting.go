@@ -59,6 +59,17 @@ type JoinRequestResolveResult struct {
 	ParticipantCode string
 }
 
+type FinalizeMeetingInput struct {
+	Slot string
+}
+
+type MeetingFinalResult struct {
+	MeetingId   uint32
+	Slot        string
+	FinalizedBy string
+	FinalizedAt time.Time
+}
+
 var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrNotFound     = errors.New("not found")
@@ -554,6 +565,13 @@ func (s *MeetingService) SubmitVotesRequest(meetingId uint32, selectedSlots []st
 
 	// participantCode가 있으면 기존 승인 코드 경로를 우선 사용
 	if participantCode != "" {
+		if strings.HasPrefix(participantCode, "guest:") {
+			if hostName == "" {
+				hostName = "Guest"
+			}
+			return s.repository.SubmitVotes(context.Background(), meetingId, selectedSlots, participantCode, hostName)
+		}
+
 		_, valid, err := s.VerifyParticipantCode(context.Background(), meetingId, participantCode)
 		if err != nil {
 			return err
@@ -598,6 +616,137 @@ func (s *MeetingService) DeleteVotesRequest(meetingId uint32, participantCode st
 	}
 
 	return s.repository.DeleteVotes(context.Background(), meetingId, participantCode)
+}
+
+func (s *MeetingService) FinalizeMeeting(
+	ctx context.Context,
+	meetingId uint32,
+	hostId string,
+	in FinalizeMeetingInput,
+) (*MeetingFinalResult, error) {
+	meeting, err := s.ensureHostOfMeeting(ctx, meetingId, hostId)
+	if err != nil {
+		return nil, err
+	}
+
+	slot := strings.TrimSpace(in.Slot)
+	if slot == "" {
+		return nil, fmt.Errorf("%w: slot is required", ErrInvalidInput)
+	}
+
+	if err := validateFinalSlot(slot, meeting); err != nil {
+		return nil, err
+	}
+
+	finalizedBy := strings.TrimSpace(meeting.HostName)
+	if finalizedBy == "" {
+		finalizedBy = strings.TrimSpace(hostId)
+	}
+
+	if err := s.repository.FinalizeMeeting(ctx, meetingId, slot, finalizedBy); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if updated.FinalizedAt == nil {
+		return nil, fmt.Errorf("%w: finalized timestamp missing", ErrInvalidState)
+	}
+
+	return &MeetingFinalResult{
+		MeetingId:   updated.ID,
+		Slot:        updated.FinalSlot,
+		FinalizedBy: updated.FinalizedBy,
+		FinalizedAt: *updated.FinalizedAt,
+	}, nil
+}
+
+func (s *MeetingService) GetMeetingFinal(
+	ctx context.Context,
+	meetingId uint32,
+) (*MeetingFinalResult, error) {
+	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if strings.TrimSpace(meeting.FinalSlot) == "" || meeting.FinalizedAt == nil {
+		return nil, ErrNotFound
+	}
+
+	return &MeetingFinalResult{
+		MeetingId:   meeting.ID,
+		Slot:        meeting.FinalSlot,
+		FinalizedBy: meeting.FinalizedBy,
+		FinalizedAt: *meeting.FinalizedAt,
+	}, nil
+}
+
+func (s *MeetingService) ClearMeetingFinal(
+	ctx context.Context,
+	meetingId uint32,
+	hostId string,
+) error {
+	if _, err := s.ensureHostOfMeeting(ctx, meetingId, hostId); err != nil {
+		return err
+	}
+
+	return s.repository.ClearMeetingFinalization(ctx, meetingId)
+}
+
+func validateFinalSlot(slot string, meeting *model.Meeting) error {
+	if len(slot) != 16 || slot[10] != '-' {
+		return fmt.Errorf("%w: slot format must be YYYY-MM-DD-HH:mm", ErrInvalidInput)
+	}
+
+	datePart := slot[:10]
+	timePart := slot[11:]
+
+	if _, err := time.Parse("2006-01-02", datePart); err != nil {
+		return fmt.Errorf("%w: invalid slot date", ErrInvalidInput)
+	}
+
+	timeMin, err := parseTimeMinutes(timePart, false)
+	if err != nil {
+		return fmt.Errorf("%w: invalid slot time", ErrInvalidInput)
+	}
+	if timeMin%30 != 0 {
+		return fmt.Errorf("%w: slot must align to 30-minute intervals", ErrInvalidInput)
+	}
+
+	startMin, err := parseTimeMinutes(meeting.StartTime, false)
+	if err != nil {
+		return fmt.Errorf("%w: meeting start time invalid", ErrInvalidState)
+	}
+	endMin, err := parseTimeMinutes(meeting.EndTime, true)
+	if err != nil {
+		return fmt.Errorf("%w: meeting end time invalid", ErrInvalidState)
+	}
+	if timeMin < startMin || timeMin >= endMin {
+		return fmt.Errorf("%w: slot is outside meeting time range", ErrInvalidInput)
+	}
+
+	dateAllowed := false
+	for _, d := range meeting.Dates {
+		if d.Format("2006-01-02") == datePart {
+			dateAllowed = true
+			break
+		}
+	}
+	if !dateAllowed {
+		return fmt.Errorf("%w: slot date not in candidate dates", ErrInvalidInput)
+	}
+
+	return nil
 }
 
 type AddPushSubscriptionInput struct {

@@ -139,7 +139,13 @@ func (h *MeetingHandler) GetMeetingById(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, meeting)
+	votes, err := h.service.GetVotesByMeetingId(c.Request.Context(), meeting.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, buildMeetingWithVotesResponse(meeting, votes))
 }
 
 type updateMeetingRequest struct {
@@ -240,6 +246,9 @@ type meetingWithVotesResponse struct {
 	CreatedAt        time.Time     `json:"createdAt"`
 	Dates            []time.Time   `json:"dates"`
 	Description      string        `json:"description"`
+	FinalSlot        string        `json:"finalSlot,omitempty"`
+	FinalizedAt      *time.Time    `json:"finalizedAt,omitempty"`
+	FinalizedBy      string        `json:"finalizedBy,omitempty"`
 	HostId           string        `json:"hostId"`
 	HostName         string        `json:"hostName"`
 	Id               uint32        `json:"id"`
@@ -252,6 +261,17 @@ type meetingWithVotesResponse struct {
 	Title            string        `json:"title"`
 	UpdatedAt        time.Time     `json:"updatedAt"`
 	VoteSummary      []slotSummary `json:"voteSummary"`
+}
+
+type finalizeMeetingRequest struct {
+	Slot string `json:"slot" binding:"required"`
+}
+
+type meetingFinalResponse struct {
+	MeetingId   uint32    `json:"meetingId"`
+	Slot        string    `json:"slot"`
+	FinalizedBy string    `json:"finalizedBy"`
+	FinalizedAt time.Time `json:"finalizedAt"`
 }
 
 func (h *MeetingHandler) GetMeetingByInviteCode(c *gin.Context) {
@@ -274,28 +294,7 @@ func (h *MeetingHandler) GetMeetingByInviteCode(c *gin.Context) {
 		return
 	}
 
-	response := meetingWithVotesResponse{
-		CreatedAt:        meeting.CreatedAt,
-		Dates:            meeting.Dates,
-		Description:      meeting.Description,
-		HostId:           meeting.HostId,
-		HostName:         meeting.HostName,
-		Id:               meeting.ID,
-		InviteCode:       meeting.InviteCode,
-		InvitePolicy:     meeting.InvitePolicy,
-		Location:         meeting.Location,
-		ParticipantCount: len(votes),
-		ShortId:          meeting.ShortId,
-		TimeRange: timeRange{
-			StartTime: meeting.StartTime,
-			EndTime:   meeting.EndTime,
-		},
-		Title:       meeting.Title,
-		UpdatedAt:   meeting.UpdatedAt,
-		VoteSummary: buildSlotSummary(votes),
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, buildMeetingWithVotesResponse(meeting, votes))
 }
 
 type createJoinRequestRequest struct {
@@ -461,28 +460,71 @@ func (h *MeetingHandler) GetMeetingByShortId(c *gin.Context) {
 		return
 	}
 
-	response := meetingWithVotesResponse{
-		CreatedAt:        meeting.CreatedAt,
-		Dates:            meeting.Dates,
-		Description:      meeting.Description,
-		HostId:           meeting.HostId,
-		HostName:         meeting.HostName,
-		Id:               meeting.ID,
-		InviteCode:       meeting.InviteCode,
-		InvitePolicy:     meeting.InvitePolicy,
-		Location:         meeting.Location,
-		ParticipantCount: len(votes),
-		ShortId:          meeting.ShortId,
-		TimeRange: timeRange{
-			StartTime: meeting.StartTime,
-			EndTime:   meeting.EndTime,
-		},
-		Title:       meeting.Title,
-		UpdatedAt:   meeting.UpdatedAt,
-		VoteSummary: buildSlotSummary(votes),
+	c.JSON(http.StatusOK, buildMeetingWithVotesResponse(meeting, votes))
+}
+
+func (h *MeetingHandler) FinalizeMeeting(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	var req finalizeMeetingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	hostID := c.GetString("userId")
+	result, err := h.service.FinalizeMeeting(c.Request.Context(), meetingId, hostID, service.FinalizeMeetingInput{
+		Slot: req.Slot,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, meetingFinalResponse{
+		MeetingId:   result.MeetingId,
+		Slot:        result.Slot,
+		FinalizedBy: result.FinalizedBy,
+		FinalizedAt: result.FinalizedAt,
+	})
+}
+
+func (h *MeetingHandler) GetMeetingFinal(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	result, err := h.service.GetMeetingFinal(c.Request.Context(), meetingId)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, meetingFinalResponse{
+		MeetingId:   result.MeetingId,
+		Slot:        result.Slot,
+		FinalizedBy: result.FinalizedBy,
+		FinalizedAt: result.FinalizedAt,
+	})
+}
+
+func (h *MeetingHandler) ClearMeetingFinal(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	hostID := c.GetString("userId")
+	if err := h.service.ClearMeetingFinal(c.Request.Context(), meetingId, hostID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func validateShortId(shortId string) bool {
@@ -519,6 +561,32 @@ func buildSlotSummary(votes []*model.Vote) []slotSummary {
 	}
 
 	return summary
+}
+
+func buildMeetingWithVotesResponse(meeting *model.Meeting, votes []*model.Vote) meetingWithVotesResponse {
+	return meetingWithVotesResponse{
+		CreatedAt:        meeting.CreatedAt,
+		Dates:            meeting.Dates,
+		Description:      meeting.Description,
+		FinalSlot:        meeting.FinalSlot,
+		FinalizedAt:      meeting.FinalizedAt,
+		FinalizedBy:      meeting.FinalizedBy,
+		HostId:           meeting.HostId,
+		HostName:         meeting.HostName,
+		Id:               meeting.ID,
+		InviteCode:       meeting.InviteCode,
+		InvitePolicy:     meeting.InvitePolicy,
+		Location:         meeting.Location,
+		ParticipantCount: len(votes),
+		ShortId:          meeting.ShortId,
+		TimeRange: timeRange{
+			StartTime: meeting.StartTime,
+			EndTime:   meeting.EndTime,
+		},
+		Title:       meeting.Title,
+		UpdatedAt:   meeting.UpdatedAt,
+		VoteSummary: buildSlotSummary(votes),
+	}
 }
 
 func parseUint32Param(c *gin.Context, name string) (uint32, bool) {

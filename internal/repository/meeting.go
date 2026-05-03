@@ -385,3 +385,15 @@ func (r *MeetingRepository) CountAttendanceReminderTargets(ctx context.Context, 
 
 	return count, nil
 }
+
+func (r *MeetingRepository) CreateAttendanceNudge(ctx context.Context, nudge *model.AttendanceNudge) (*model.AttendanceNudge, error) {
+	_, err := r.db.NewInsert().
+		Model(nudge).
+		Returning("*").
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return nudge, nil
+}

@@ -642,7 +642,8 @@ func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId u
 		return nil, err
 	}
 
-	if len(strings.TrimSpace(messageOverride)) > 200 {
+	trimmedMessageOverride := strings.TrimSpace(messageOverride)
+	if len(trimmedMessageOverride) > 200 {
 		return nil, fmt.Errorf("%w: messageOverride must be 200 characters or fewer", ErrInvalidInput)
 	}
 
@@ -655,12 +656,24 @@ func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId u
 		return nil, fmt.Errorf("%w: no pending participants to remind", ErrInvalidState)
 	}
 
-	queuedAt := time.Now().UTC()
+	nudge, err := s.repository.CreateAttendanceNudge(ctx, &model.AttendanceNudge{
+		NudgeId:           "nudge_" + randomAlphaNum(12),
+		MeetingId:         meetingId,
+		TriggerType:       "manual",
+		RequestedByUserId: strings.TrimSpace(hostId),
+		MessageOverride:   trimmedMessageOverride,
+		TargetCount:       targetCount,
+		Status:            "queued",
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &SendAttendanceReminderResponse{
-		NudgeId:     "nudge_" + randomAlphaNum(12),
+		NudgeId:     nudge.NudgeId,
 		MeetingId:   meetingId,
 		TargetCount: targetCount,
-		QueuedAt:    queuedAt,
+		QueuedAt:    nudge.QueuedAt,
 	}, nil
 }
 

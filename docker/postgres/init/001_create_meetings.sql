@@ -142,3 +142,31 @@ CREATE INDEX IF NOT EXISTS notification_subscriptions_meeting_active_idx
 
 CREATE INDEX IF NOT EXISTS notification_subscriptions_user_device_idx
     ON notification_subscriptions (user_id, device_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- attendance_nudges : 독촉 발송 이력 및 쿼터 제어
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS attendance_nudges (
+    id                    SERIAL       PRIMARY KEY,
+    nudge_id              VARCHAR(32)  NOT NULL UNIQUE,
+    meeting_id            INTEGER      NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    trigger_type          VARCHAR(16)  NOT NULL,
+    requested_by_user_id  VARCHAR(64),
+    message_override      VARCHAR(200),
+    target_count          INTEGER      NOT NULL,
+    queued_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    sent_at               TIMESTAMPTZ,
+    status                VARCHAR(16)  NOT NULL DEFAULT 'queued',
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT attendance_nudges_trigger_type_chk
+        CHECK (trigger_type IN ('auto', 'manual')),
+    CONSTRAINT attendance_nudges_status_chk
+        CHECK (status IN ('queued', 'sent', 'failed')),
+    CONSTRAINT attendance_nudges_target_count_chk
+        CHECK (target_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS attendance_nudges_meeting_trigger_queued_idx
+    ON attendance_nudges (meeting_id, trigger_type, queued_at DESC);

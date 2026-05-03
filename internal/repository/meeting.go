@@ -277,3 +277,44 @@ func (r *MeetingRepository) DeleteVotes(ctx context.Context, meetingId uint32, p
 		Exec(ctx)
 	return err
 }
+
+func (r *MeetingRepository) AddPushSubscription(
+	ctx context.Context,
+	meetingId uint32,
+	userId string,
+	deviceId string,
+	isStandalone bool,
+	notificationPermissionStatus string,
+	endpoint string,
+	auth string,
+	p256dh string,
+) error {
+	record := &model.NotificationSubscription{
+		MeetingId:                    meetingId,
+		UserId:                       userId,
+		DeviceId:                     deviceId,
+		Endpoint:                     endpoint,
+		P256dh:                       p256dh,
+		Auth:                         auth,
+		IsStandalone:                 isStandalone,
+		NotificationPermissionStatus: notificationPermissionStatus,
+		IsActive:                     true,
+		EndpointStatus:               "active",
+	}
+
+	_, err := r.db.NewInsert().
+		Model(record).
+		On("CONFLICT (meeting_id, user_id, device_id) DO UPDATE").
+		Set("endpoint = EXCLUDED.endpoint").
+		Set("p256dh = EXCLUDED.p256dh").
+		Set("auth = EXCLUDED.auth").
+		Set("is_standalone = EXCLUDED.is_standalone").
+		Set("notification_permission_status = EXCLUDED.notification_permission_status").
+		Set("is_active = TRUE").
+		Set("endpoint_status = 'active'").
+		Set("last_verified_at = NOW()").
+		Set("updated_at = NOW()").
+		Exec(ctx)
+
+	return err
+}

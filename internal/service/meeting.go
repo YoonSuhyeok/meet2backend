@@ -599,3 +599,61 @@ func (s *MeetingService) DeleteVotesRequest(meetingId uint32, participantCode st
 
 	return s.repository.DeleteVotes(context.Background(), meetingId, participantCode)
 }
+
+type AddPushSubscriptionInput struct {
+	DeviceId                     string                `json:"deviceId" binding:"required,min=8,max=64"`
+	IsStandalone                 bool                  `json:"isStandalone"`
+	NotificationPermissionStatus string                `json:"notificationPermissionStatus" binding:"required,oneof=granted denied default"`
+	PushSubscription             PushSubscriptionInput `json:"pushSubscription" binding:"required"`
+}
+
+type PushSubscriptionInput struct {
+	Endpoint string                    `json:"endpoint" binding:"required"`
+	Keys     PushSubscriptionKeysInput `json:"keys" binding:"required"`
+}
+
+type PushSubscriptionKeysInput struct {
+	Auth   string `json:"auth" binding:"required"`
+	P256dh string `json:"p256dh" binding:"required"`
+}
+
+func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint32, userId string, input AddPushSubscriptionInput) error {
+	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	if strings.TrimSpace(userId) == "" {
+		return ErrForbidden
+	}
+
+	if !input.IsStandalone {
+		return fmt.Errorf("%w: standalone mode required", ErrInvalidInput)
+	}
+
+	if input.NotificationPermissionStatus != "granted" {
+		return fmt.Errorf("%w: notification permission must be granted", ErrInvalidInput)
+	}
+
+	if strings.TrimSpace(input.PushSubscription.Endpoint) == "" ||
+		strings.TrimSpace(input.PushSubscription.Keys.Auth) == "" ||
+		strings.TrimSpace(input.PushSubscription.Keys.P256dh) == "" {
+		return fmt.Errorf("%w: invalid push subscription payload", ErrInvalidInput)
+	}
+
+	_ = meeting
+	return s.repository.AddPushSubscription(
+		ctx,
+		meetingId,
+		strings.TrimSpace(userId),
+		strings.TrimSpace(input.DeviceId),
+		input.IsStandalone,
+		input.NotificationPermissionStatus,
+		strings.TrimSpace(input.PushSubscription.Endpoint),
+		strings.TrimSpace(input.PushSubscription.Keys.Auth),
+		strings.TrimSpace(input.PushSubscription.Keys.P256dh),
+	)
+}

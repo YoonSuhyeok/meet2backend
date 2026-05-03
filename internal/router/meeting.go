@@ -25,4 +25,6 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.GET("/meetings/:meetingId/join-requests", h.ListJoinRequests)
 	auth.POST("/meetings/:meetingId/join-requests/:requestId/approve", h.ApproveJoinRequest)
 	auth.POST("/meetings/:meetingId/join-requests/:requestId/reject", h.RejectJoinRequest)
+	// PushNotification 구독 등록​
+	auth.POST("/meetings/:meetingId/push-subscriptions", h.AddPushSubscription)
 }

@@ -108,3 +108,37 @@ CREATE INDEX IF NOT EXISTS meeting_participants_meeting_id_idx
 
 CREATE INDEX IF NOT EXISTS meeting_participants_requester_id_idx
     ON meeting_participants (requester_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- notification_subscriptions : 미팅 단위 푸시 구독
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notification_subscriptions (
+    id                               SERIAL       PRIMARY KEY,
+    meeting_id                       INTEGER      NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    user_id                          VARCHAR(64)  NOT NULL,
+    device_id                        VARCHAR(64)  NOT NULL,
+    endpoint                         TEXT         NOT NULL,
+    p256dh                           TEXT         NOT NULL,
+    auth                             TEXT         NOT NULL,
+    is_standalone                    BOOLEAN      NOT NULL DEFAULT FALSE,
+    notification_permission_status   VARCHAR(16)  NOT NULL,
+    is_active                        BOOLEAN      NOT NULL DEFAULT TRUE,
+    endpoint_status                  VARCHAR(32)  NOT NULL DEFAULT 'active',
+    registered_at                    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    last_verified_at                 TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    created_at                       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at                       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT notification_subscriptions_permission_chk
+        CHECK (notification_permission_status IN ('granted', 'denied', 'default')),
+    CONSTRAINT notification_subscriptions_endpoint_status_chk
+        CHECK (endpoint_status IN ('active', 'sending_suppressed', 'invalid')),
+    CONSTRAINT notification_subscriptions_uniq
+        UNIQUE (meeting_id, user_id, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS notification_subscriptions_meeting_active_idx
+    ON notification_subscriptions (meeting_id, is_active, endpoint_status);
+
+CREATE INDEX IF NOT EXISTS notification_subscriptions_user_device_idx
+    ON notification_subscriptions (user_id, device_id);

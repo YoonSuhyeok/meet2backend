@@ -75,3 +75,23 @@ type MeetingWithVotes struct {
 	Meeting *Meeting `json:"meeting"`
 	Votes   []*Vote  `json:"votes"`
 }
+
+type NotificationSubscription struct {
+	bun.BaseModel `bun:"table:notification_subscriptions,alias:ns"`
+
+	ID                           uint32    `bun:"id,pk,autoincrement" json:"id"`
+	MeetingId                    uint32    `bun:"meeting_id,notnull" json:"meetingId"`
+	UserId                       string    `bun:"user_id,notnull" json:"userId"`
+	DeviceId                     string    `bun:"device_id,notnull" json:"deviceId"`
+	Endpoint                     string    `bun:"endpoint,notnull" json:"endpoint"`
+	P256dh                       string    `bun:"p256dh,notnull" json:"p256dh"`
+	Auth                         string    `bun:"auth,notnull" json:"auth"`
+	IsStandalone                 bool      `bun:"is_standalone,notnull,default:false" json:"isStandalone"`
+	NotificationPermissionStatus string    `bun:"notification_permission_status,notnull" json:"notificationPermissionStatus"`
+	IsActive                     bool      `bun:"is_active,notnull,default:true" json:"isActive"`
+	EndpointStatus               string    `bun:"endpoint_status,notnull,default:'active'" json:"endpointStatus"`
+	RegisteredAt                 time.Time `bun:"registered_at,nullzero,notnull,default:current_timestamp" json:"registeredAt"`
+	LastVerifiedAt               time.Time `bun:"last_verified_at,nullzero,notnull,default:current_timestamp" json:"lastVerifiedAt"`
+	CreatedAt                    time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp" json:"createdAt"`
+	UpdatedAt                    time.Time `bun:"updated_at,nullzero,notnull,default:current_timestamp" json:"updatedAt"`
+}

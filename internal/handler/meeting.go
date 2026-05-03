@@ -549,3 +549,25 @@ func writeServiceError(c *gin.Context, err error) {
 		})
 	}
 }
+
+func (h *MeetingHandler) AddPushSubscription(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	var req service.AddPushSubscriptionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("userId")
+	err := h.service.AddPushSubscription(c.Request.Context(), meetingId, userID, req)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "push subscription added"})
+}

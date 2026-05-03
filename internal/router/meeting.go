@@ -27,4 +27,8 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.POST("/meetings/:meetingId/join-requests/:requestId/reject", h.RejectJoinRequest)
 	// PushNotification 구독 등록​
 	auth.POST("/meetings/:meetingId/push-subscriptions", h.AddPushSubscription)
+	// PushNotification 구독 상태 조회 (현재 기기)
+	auth.GET("/meetings/:meetingId/push-subscriptions/status", h.GetPushSubscriptionStatus)
+	// PushNotification 구독 해지
+	auth.DELETE("/meetings/:meetingId/push-subscriptions", h.RemovePushSubscription)
 }

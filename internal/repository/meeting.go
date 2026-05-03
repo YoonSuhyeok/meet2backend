@@ -318,3 +318,34 @@ func (r *MeetingRepository) AddPushSubscription(
 
 	return err
 }
+
+func (r *MeetingRepository) RemovePushSubscription(ctx context.Context, meetingId uint32, userId string, deviceId string) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.NotificationSubscription)(nil)).
+		Set("is_active = FALSE").
+		Set("updated_at = NOW()").
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", userId).
+		Where("device_id = ?", deviceId).
+		Exec(ctx)
+
+	return err
+}
+
+func (r *MeetingRepository) GetPushSubscriptionByDevice(ctx context.Context, meetingId uint32, userId string, deviceId string) (*model.NotificationSubscription, error) {
+	var sub model.NotificationSubscription
+	err := r.db.NewSelect().
+		Model(&sub).
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", userId).
+		Where("device_id = ?", deviceId).
+		Scan(ctx)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &sub, nil
+}

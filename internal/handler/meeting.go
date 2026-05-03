@@ -571,3 +571,38 @@ func (h *MeetingHandler) AddPushSubscription(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "push subscription added"})
 }
+
+func (h *MeetingHandler) GetPushSubscriptionStatus(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	userID := c.GetString("userId")
+	deviceID := c.GetHeader("X-Device-Id")
+
+	status, err := h.service.GetPushSubscriptionStatus(c.Request.Context(), meetingId, userID, deviceID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+func (h *MeetingHandler) RemovePushSubscription(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	userID := c.GetString("userId")
+	deviceID := c.GetHeader("X-Device-Id")
+	err := h.service.RemovePushSubscription(c.Request.Context(), meetingId, userID, deviceID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}

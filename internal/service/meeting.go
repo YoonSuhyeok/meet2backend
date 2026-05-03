@@ -617,6 +617,19 @@ type PushSubscriptionKeysInput struct {
 	P256dh string `json:"p256dh" binding:"required"`
 }
 
+type PushSubscriptionStatusResponse struct {
+	MeetingId                      uint32     `json:"meetingId"`
+	UserId                         string     `json:"userId"`
+	DeviceId                       string     `json:"deviceId"`
+	IsSubscribed                   bool       `json:"isSubscribed"`
+	IsStandalone                   bool       `json:"isStandalone"`
+	NotificationPermissionStatus   string     `json:"notificationPermissionStatus"`
+	InstallFlagStatus              string     `json:"installFlagStatus"`
+	PushSubscriptionEndpointStatus string     `json:"pushSubscriptionEndpointStatus"`
+	LastVerifiedAt                 *time.Time `json:"lastVerifiedAt,omitempty"`
+	LastNudgeAt                    *time.Time `json:"lastNudgeAt"`
+}
+
 func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint32, userId string, input AddPushSubscriptionInput) error {
 	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {
@@ -656,4 +669,84 @@ func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint
 		strings.TrimSpace(input.PushSubscription.Keys.Auth),
 		strings.TrimSpace(input.PushSubscription.Keys.P256dh),
 	)
+}
+
+func (s *MeetingService) RemovePushSubscription(ctx context.Context, meetingId uint32, userId string, deviceId string) error {
+	_, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	if strings.TrimSpace(userId) == "" {
+		return ErrForbidden
+	}
+
+	if strings.TrimSpace(deviceId) == "" {
+		return fmt.Errorf("%w: device ID is required", ErrInvalidInput)
+	}
+
+	return s.repository.RemovePushSubscription(ctx, meetingId, strings.TrimSpace(userId), strings.TrimSpace(deviceId))
+}
+
+func (s *MeetingService) GetPushSubscriptionStatus(ctx context.Context, meetingId uint32, userId string, deviceId string) (*PushSubscriptionStatusResponse, error) {
+	_, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	userId = strings.TrimSpace(userId)
+	deviceId = strings.TrimSpace(deviceId)
+	if userId == "" {
+		return nil, ErrForbidden
+	}
+	if deviceId == "" {
+		return nil, fmt.Errorf("%w: device ID is required", ErrInvalidInput)
+	}
+
+	subscription, err := s.repository.GetPushSubscriptionByDevice(ctx, meetingId, userId, deviceId)
+	if err != nil {
+		return nil, err
+	}
+
+	if subscription == nil {
+		return &PushSubscriptionStatusResponse{
+			MeetingId:                      meetingId,
+			UserId:                         userId,
+			DeviceId:                       deviceId,
+			IsSubscribed:                   false,
+			IsStandalone:                   false,
+			NotificationPermissionStatus:   "default",
+			InstallFlagStatus:              "disabled",
+			PushSubscriptionEndpointStatus: "invalid",
+			LastVerifiedAt:                 nil,
+			LastNudgeAt:                    nil,
+		}, nil
+	}
+
+	lastVerifiedAt := subscription.LastVerifiedAt
+	return &PushSubscriptionStatusResponse{
+		MeetingId:                      meetingId,
+		UserId:                         userId,
+		DeviceId:                       deviceId,
+		IsSubscribed:                   subscription.IsActive,
+		IsStandalone:                   subscription.IsStandalone,
+		NotificationPermissionStatus:   subscription.NotificationPermissionStatus,
+		InstallFlagStatus:              "active",
+		PushSubscriptionEndpointStatus: normalizeEndpointStatus(subscription.EndpointStatus),
+		LastVerifiedAt:                 &lastVerifiedAt,
+		LastNudgeAt:                    nil,
+	}, nil
+}
+
+func normalizeEndpointStatus(status string) string {
+	if status == "" {
+		return "invalid"
+	}
+	return strings.ReplaceAll(status, "_", "-")
 }

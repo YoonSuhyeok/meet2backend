@@ -210,8 +210,8 @@ func (s *MeetingService) DeleteMeeting(ctx context.Context, meetingId uint32, ho
 	return s.repository.DeleteMeeting(ctx, meetingId)
 }
 
-func (s *MeetingService) GetMeetings(ctx context.Context, cursor string, limit uint32) ([]*model.Meeting, string, error) {
-	return s.repository.GetMeetings(ctx, cursor, limit)
+func (s *MeetingService) GetMeetings(ctx context.Context, userId string, cursor string, limit uint32) ([]*model.Meeting, string, error) {
+	return s.repository.GetMeetings(ctx, userId, cursor, limit)
 }
 
 func (s *MeetingService) GetMeetingById(ctx context.Context, meetingId uint32) (*model.Meeting, error) {
@@ -301,6 +301,19 @@ func (s *MeetingService) GetVotesByMeetingIdAuthorized(ctx context.Context, meet
 		return s.repository.GetVotesByMeetingId(ctx, meetingId)
 	}
 
+	hostId = strings.TrimSpace(hostId)
+	if hostId != "" {
+		hasVote, err := s.repository.HasVoteByMeetingAndUser(ctx, meetingId, hostId)
+		if err != nil {
+			log.Printf("[votes:auth] meetingId=%d check_user_vote_failed err=%v", meetingId, err)
+			return nil, err
+		}
+		if hasVote {
+			log.Printf("[votes:auth] meetingId=%d access=participant_user", meetingId)
+			return s.repository.GetVotesByMeetingId(ctx, meetingId)
+		}
+	}
+
 	participantCode = strings.TrimSpace(participantCode)
 	if participantCode == "" {
 		log.Printf(
@@ -309,6 +322,20 @@ func (s *MeetingService) GetVotesByMeetingIdAuthorized(ctx context.Context, meet
 			strings.TrimSpace(hostId) != "",
 		)
 		return nil, ErrForbidden
+	}
+
+	if strings.HasPrefix(participantCode, "guest:") {
+		hasVote, err := s.repository.HasVoteByMeetingAndUser(ctx, meetingId, participantCode)
+		if err != nil {
+			log.Printf("[votes:auth] meetingId=%d check_guest_vote_failed err=%v", meetingId, err)
+			return nil, err
+		}
+		if !hasVote {
+			log.Printf("[votes:auth] meetingId=%d access=denied reason=guest_vote_not_found", meetingId)
+			return nil, ErrForbidden
+		}
+		log.Printf("[votes:auth] meetingId=%d access=guest_participant_code", meetingId)
+		return s.repository.GetVotesByMeetingId(ctx, meetingId)
 	}
 
 	_, valid, err := s.VerifyParticipantCode(ctx, meetingId, participantCode)

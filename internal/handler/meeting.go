@@ -108,7 +108,13 @@ func (h *MeetingHandler) GetMeetings(c *gin.Context) {
 		return
 	}
 
-	meetings, nextCursor, err := h.service.GetMeetings(c.Request.Context(), c.Query("cursor"), uint32(limit))
+	userID := c.GetString("userId")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user headers"})
+		return
+	}
+
+	meetings, nextCursor, err := h.service.GetMeetings(c.Request.Context(), userID, c.Query("cursor"), uint32(limit))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -36,7 +36,7 @@ func (r *MeetingRepository) GetMeetingById(ctx context.Context, id uint32) (*mod
 	return &meeting, nil
 }
 
-func (r *MeetingRepository) GetMeetings(ctx context.Context, cursor string, limit uint32) ([]*model.Meeting, string, error) {
+func (r *MeetingRepository) GetMeetings(ctx context.Context, userId string, cursor string, limit uint32) ([]*model.Meeting, string, error) {
 	var meetings []*model.Meeting
 
 	query := r.db.NewSelect().
@@ -44,6 +44,7 @@ func (r *MeetingRepository) GetMeetings(ctx context.Context, cursor string, limi
 		ColumnExpr("m.*").
 		ColumnExpr("COALESCE(v.vote_count, 0) AS participant_count").
 		Join("LEFT JOIN (SELECT meeting_id, COUNT(*) AS vote_count FROM votes GROUP BY meeting_id) AS v ON v.meeting_id = m.id").
+		Where("(m.host_id = ? OR EXISTS (SELECT 1 FROM votes vv WHERE vv.meeting_id = m.id AND vv.user_id = ?))", userId, userId).
 		Order("m.id DESC").
 		Limit(int(limit) + 1)
 
@@ -282,6 +283,19 @@ func (r *MeetingRepository) DeleteVotes(ctx context.Context, meetingId uint32, p
 		Where("user_id = ?", participantCode).
 		Exec(ctx)
 	return err
+}
+
+func (r *MeetingRepository) HasVoteByMeetingAndUser(ctx context.Context, meetingId uint32, userId string) (bool, error) {
+	exists, err := r.db.NewSelect().
+		Model((*model.Vote)(nil)).
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", userId).
+		Exists(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 func (r *MeetingRepository) FinalizeMeeting(

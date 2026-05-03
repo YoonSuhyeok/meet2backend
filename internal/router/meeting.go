@@ -31,4 +31,6 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.GET("/meetings/:meetingId/push-subscriptions/status", h.GetPushSubscriptionStatus)
 	// PushNotification 구독 해지
 	auth.DELETE("/meetings/:meetingId/push-subscriptions", h.RemovePushSubscription)
+	// 내 구독 상태 확인 (기기별)
+	auth.GET("/meetings/:meetingId/push-subscriptions", h.GetMyPushSubscriptionStatus)
 }

@@ -744,6 +744,45 @@ func (s *MeetingService) GetPushSubscriptionStatus(ctx context.Context, meetingI
 	}, nil
 }
 
+func (s *MeetingService) GetMyPushSubscriptionStatus(ctx context.Context, meetingId uint32, userId string) ([]*PushSubscriptionStatusResponse, error) {
+	_, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	userId = strings.TrimSpace(userId)
+	if userId == "" {
+		return nil, ErrForbidden
+	}
+
+	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, meetingId, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	statusList := make([]*PushSubscriptionStatusResponse, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		lastVerifiedAt := subscription.LastVerifiedAt
+		statusList = append(statusList, &PushSubscriptionStatusResponse{
+			MeetingId:                      meetingId,
+			UserId:                         userId,
+			DeviceId:                       subscription.DeviceId,
+			IsSubscribed:                   subscription.IsActive,
+			IsStandalone:                   subscription.IsStandalone,
+			NotificationPermissionStatus:   subscription.NotificationPermissionStatus,
+			InstallFlagStatus:              "active",
+			PushSubscriptionEndpointStatus: normalizeEndpointStatus(subscription.EndpointStatus),
+			LastVerifiedAt:                 &lastVerifiedAt,
+			LastNudgeAt:                    nil,
+		})
+	}
+
+	return statusList, nil
+}
+
 func normalizeEndpointStatus(status string) string {
 	if status == "" {
 		return "invalid"

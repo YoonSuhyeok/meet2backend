@@ -606,3 +606,19 @@ func (h *MeetingHandler) RemovePushSubscription(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+func (h *MeetingHandler) GetMyPushSubscriptionStatus(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	userID := c.GetString("userId")
+	statusList, err := h.service.GetMyPushSubscriptionStatus(c.Request.Context(), meetingId, userID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"subscriptions": statusList})
+}

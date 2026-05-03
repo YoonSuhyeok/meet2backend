@@ -349,3 +349,18 @@ func (r *MeetingRepository) GetPushSubscriptionByDevice(ctx context.Context, mee
 
 	return &sub, nil
 }
+
+func (r *MeetingRepository) GetPushSubscriptionsByUser(ctx context.Context, meetingId uint32, userId string) ([]*model.NotificationSubscription, error) {
+	var subs []*model.NotificationSubscription
+	err := r.db.NewSelect().
+		Model(&subs).
+		Where("meeting_id = ?", meetingId).
+		Where("user_id = ?", userId).
+		Order("updated_at DESC").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return subs, nil
+}

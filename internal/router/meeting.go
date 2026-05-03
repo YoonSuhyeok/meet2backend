@@ -33,4 +33,7 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	auth.DELETE("/meetings/:meetingId/push-subscriptions", h.RemovePushSubscription)
 	// 내 구독 상태 확인 (기기별)
 	auth.GET("/meetings/:meetingId/push-subscriptions", h.GetMyPushSubscriptionStatus)
+	// 미응답자 독촉 PushNotification 발송 (수동, 호스트만)
+	auth.POST("/meetings/:meetingId/attendance", h.SendAttendanceReminder)
+	auth.POST("/meetings/:meetingId/attendance-nudges", h.SendAttendanceReminder)
 }

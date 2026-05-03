@@ -630,6 +630,40 @@ type PushSubscriptionStatusResponse struct {
 	LastNudgeAt                    *time.Time `json:"lastNudgeAt"`
 }
 
+type SendAttendanceReminderResponse struct {
+	NudgeId     string    `json:"nudgeId"`
+	MeetingId   uint32    `json:"meetingId"`
+	TargetCount int       `json:"targetCount"`
+	QueuedAt    time.Time `json:"queuedAt"`
+}
+
+func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId uint32, hostId string, messageOverride string) (*SendAttendanceReminderResponse, error) {
+	if _, err := s.ensureHostOfMeeting(ctx, meetingId, hostId); err != nil {
+		return nil, err
+	}
+
+	if len(strings.TrimSpace(messageOverride)) > 200 {
+		return nil, fmt.Errorf("%w: messageOverride must be 200 characters or fewer", ErrInvalidInput)
+	}
+
+	targetCount, err := s.repository.CountAttendanceReminderTargets(ctx, meetingId)
+	if err != nil {
+		return nil, err
+	}
+
+	if targetCount == 0 {
+		return nil, fmt.Errorf("%w: no pending participants to remind", ErrInvalidState)
+	}
+
+	queuedAt := time.Now().UTC()
+	return &SendAttendanceReminderResponse{
+		NudgeId:     "nudge_" + randomAlphaNum(12),
+		MeetingId:   meetingId,
+		TargetCount: targetCount,
+		QueuedAt:    queuedAt,
+	}, nil
+}
+
 func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint32, userId string, input AddPushSubscriptionInput) error {
 	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {

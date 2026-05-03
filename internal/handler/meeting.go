@@ -550,6 +550,32 @@ func writeServiceError(c *gin.Context, err error) {
 	}
 }
 
+type sendAttendanceReminderRequest struct {
+	MessageOverride string `json:"messageOverride" binding:"omitempty,max=200"`
+}
+
+func (h *MeetingHandler) SendAttendanceReminder(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	var req sendAttendanceReminderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	hostID := c.GetString("userId")
+	resp, err := h.service.SendAttendanceReminder(c.Request.Context(), meetingId, hostID, req.MessageOverride)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusAccepted, resp)
+}
+
 func (h *MeetingHandler) AddPushSubscription(c *gin.Context) {
 	meetingId, ok := parseUint32Param(c, "meetingId")
 	if !ok {

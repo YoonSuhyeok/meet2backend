@@ -364,3 +364,24 @@ func (r *MeetingRepository) GetPushSubscriptionsByUser(ctx context.Context, meet
 
 	return subs, nil
 }
+
+func (r *MeetingRepository) CountAttendanceReminderTargets(ctx context.Context, meetingId uint32) (int, error) {
+	var count int
+	err := r.db.NewSelect().
+		TableExpr("meeting_participants AS mp").
+		ColumnExpr("COUNT(DISTINCT mp.requester_id)").
+		Join("LEFT JOIN votes AS v ON v.meeting_id = mp.meeting_id AND v.user_id = mp.requester_id").
+		Join("JOIN notification_subscriptions AS ns ON ns.meeting_id = mp.meeting_id AND ns.user_id = mp.requester_id").
+		Where("mp.meeting_id = ?", meetingId).
+		Where("mp.status = ?", "active").
+		Where("v.id IS NULL").
+		Where("ns.is_active = TRUE").
+		Where("ns.endpoint_status = ?", "active").
+		Where("ns.notification_permission_status = ?", "granted").
+		Scan(ctx, &count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}

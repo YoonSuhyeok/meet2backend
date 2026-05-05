@@ -7,26 +7,32 @@ import (
 )
 
 type Config struct {
-	AppPort     string
-	DBHost      string
-	DBPort      string
-	DBUser      string
-	DBPassword  string
-	DBName      string
-	DBSSLMode   string
-	DatabaseURL string
+	AppPort         string
+	DBHost          string
+	DBPort          string
+	DBUser          string
+	DBPassword      string
+	DBName          string
+	DBSSLMode       string
+	DatabaseURL     string
+	VapidPublicKey  string
+	VapidPrivateKey string
+	VapidSubject    string
 }
 
 func Load() Config {
 	return Config{
-		AppPort:     envOrDefault("APP_PORT", "8080"),
-		DBHost:      envOrDefault("DB_HOST", "localhost"),
-		DBPort:      envOrDefault("DB_PORT", "25432"),
-		DBUser:      envOrDefault("DB_USER", "postgres"),
-		DBPassword:  envOrDefault("DB_PASSWORD", "postgres"),
-		DBName:      envOrDefault("DB_NAME", "meetback"),
-		DBSSLMode:   envOrDefault("DB_SSLMODE", "disable"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		AppPort:         envOrDefault("APP_PORT", "8080"),
+		DBHost:          envOrDefault("DB_HOST", "localhost"),
+		DBPort:          envOrDefault("DB_PORT", "25432"),
+		DBUser:          envOrDefault("DB_USER", "postgres"),
+		DBPassword:      envOrDefault("DB_PASSWORD", "postgres"),
+		DBName:          envOrDefault("DB_NAME", "meetback"),
+		DBSSLMode:       envOrDefault("DB_SSLMODE", "disable"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		VapidPublicKey:  os.Getenv("VAPID_PUBLIC_KEY"),
+		VapidPrivateKey: os.Getenv("VAPID_PRIVATE_KEY"),
+		VapidSubject:    envOrDefault("VAPID_SUBJECT", "mailto:dev@meet2meet.local"),
 	}
 }
 

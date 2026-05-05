@@ -668,6 +668,13 @@ type sendAttendanceReminderRequest struct {
 	MessageOverride string `json:"messageOverride" binding:"omitempty,max=200"`
 }
 
+type sendTestPushRequest struct {
+	Title string `json:"title" binding:"omitempty,max=80"`
+	Body  string `json:"body" binding:"omitempty,max=200"`
+	URL   string `json:"url" binding:"omitempty,max=300"`
+	Tag   string `json:"tag" binding:"omitempty,max=120"`
+}
+
 func (h *MeetingHandler) SendAttendanceReminder(c *gin.Context) {
 	meetingId, ok := parseUint32Param(c, "meetingId")
 	if !ok {
@@ -688,6 +695,33 @@ func (h *MeetingHandler) SendAttendanceReminder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, resp)
+}
+
+func (h *MeetingHandler) SendTestPush(c *gin.Context) {
+	meetingId, ok := parseUint32Param(c, "meetingId")
+	if !ok {
+		return
+	}
+
+	var req sendTestPushRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("userId")
+	resp, err := h.service.SendTestPushToSelf(c.Request.Context(), meetingId, userID, service.SendTestPushInput{
+		Title: req.Title,
+		Body:  req.Body,
+		URL:   req.URL,
+		Tag:   req.Tag,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *MeetingHandler) AddPushSubscription(c *gin.Context) {

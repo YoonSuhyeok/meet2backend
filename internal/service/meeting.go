@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -16,6 +17,15 @@ import (
 
 type MeetingService struct {
 	repository *repository.MeetingRepository
+	pushSender PushSender
+}
+
+type PushSender interface {
+	Send(
+		ctx context.Context,
+		subscription *model.NotificationSubscription,
+		payload []byte,
+	) error
 }
 
 type CreateMeetingInput struct {
@@ -83,8 +93,8 @@ var (
 	ErrInvalidInput = errors.New("invalid input")
 )
 
-func NewMeetingService(repository *repository.MeetingRepository) *MeetingService {
-	return &MeetingService{repository: repository}
+func NewMeetingService(repository *repository.MeetingRepository, pushSender PushSender) *MeetingService {
+	return &MeetingService{repository: repository, pushSender: pushSender}
 }
 
 func (s *MeetingService) CreateMeeting(ctx context.Context, in CreateMeetingInput) (*model.Meeting, error) {
@@ -848,6 +858,27 @@ type SendAttendanceReminderResponse struct {
 	QueuedAt    time.Time `json:"queuedAt"`
 }
 
+type SendTestPushInput struct {
+	Title string
+	Body  string
+	URL   string
+	Tag   string
+}
+
+type SendTestPushResult struct {
+	DeviceId string `json:"deviceId"`
+	Success  bool   `json:"success"`
+	Error    string `json:"error,omitempty"`
+}
+
+type SendTestPushResponse struct {
+	MeetingId   uint32               `json:"meetingId"`
+	SentCount   int                  `json:"sentCount"`
+	FailCount   int                  `json:"failCount"`
+	Results     []SendTestPushResult `json:"results"`
+	TriggeredAt time.Time            `json:"triggeredAt"`
+}
+
 func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId uint32, hostId string, messageOverride string) (*SendAttendanceReminderResponse, error) {
 	if _, err := s.ensureHostOfMeeting(ctx, meetingId, hostId); err != nil {
 		return nil, err
@@ -1039,6 +1070,112 @@ func (s *MeetingService) GetMyPushSubscriptionStatus(ctx context.Context, meetin
 	}
 
 	return statusList, nil
+}
+
+func (s *MeetingService) SendTestPushToSelf(
+	ctx context.Context,
+	meetingId uint32,
+	userId string,
+	input SendTestPushInput,
+) (*SendTestPushResponse, error) {
+	_, err := s.repository.GetMeetingById(ctx, meetingId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	userId = strings.TrimSpace(userId)
+	if userId == "" {
+		return nil, ErrForbidden
+	}
+
+	if s.pushSender == nil {
+		return nil, fmt.Errorf("%w: push sender is not configured", ErrInvalidState)
+	}
+
+	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, meetingId, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	activeSubscriptions := make([]*model.NotificationSubscription, 0, len(subscriptions))
+	for _, sub := range subscriptions {
+		if !sub.IsActive {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(sub.NotificationPermissionStatus)) != "granted" {
+			continue
+		}
+		if strings.TrimSpace(normalizeEndpointStatus(sub.EndpointStatus)) != "active" {
+			continue
+		}
+		activeSubscriptions = append(activeSubscriptions, sub)
+	}
+
+	if len(activeSubscriptions) == 0 {
+		return nil, fmt.Errorf("%w: no active push subscriptions for current user", ErrInvalidState)
+	}
+
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		title = "테스트 알림"
+	}
+	body := strings.TrimSpace(input.Body)
+	if body == "" {
+		body = "Meet2Meet 수동 테스트 알림입니다."
+	}
+	url := strings.TrimSpace(input.URL)
+	if url == "" {
+		url = fmt.Sprintf("/meeting/%d", meetingId)
+	}
+	tag := strings.TrimSpace(input.Tag)
+	if tag == "" {
+		tag = fmt.Sprintf("meeting-%d-test", meetingId)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"title": title,
+		"body":  body,
+		"tag":   tag,
+		"data": map[string]any{
+			"url":       url,
+			"meetingId": meetingId,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to encode push payload", ErrInvalidState)
+	}
+
+	resp := &SendTestPushResponse{
+		MeetingId:   meetingId,
+		SentCount:   0,
+		FailCount:   0,
+		Results:     make([]SendTestPushResult, 0, len(activeSubscriptions)),
+		TriggeredAt: time.Now().UTC(),
+	}
+
+	for _, sub := range activeSubscriptions {
+		err := s.pushSender.Send(ctx, sub, payload)
+		if err != nil {
+			resp.FailCount++
+			resp.Results = append(resp.Results, SendTestPushResult{
+				DeviceId: sub.DeviceId,
+				Success:  false,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		resp.SentCount++
+		resp.Results = append(resp.Results, SendTestPushResult{
+			DeviceId: sub.DeviceId,
+			Success:  true,
+		})
+	}
+
+	return resp, nil
 }
 
 func normalizeEndpointStatus(status string) string {

@@ -25,7 +25,17 @@ func main() {
 	healthHandler := handler.NewHealthHandler(db)
 
 	meetingRepository := repository.NewMeetingRepository(db)
-	meetingService := service.NewMeetingService(meetingRepository)
+	var pushSender service.PushSender
+	if cfg.VapidPublicKey != "" && cfg.VapidPrivateKey != "" {
+		pushSender = service.NewWebPushSender(
+			cfg.VapidSubject,
+			cfg.VapidPublicKey,
+			cfg.VapidPrivateKey,
+		)
+	} else {
+		log.Printf("[push] disabled: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY is not configured")
+	}
+	meetingService := service.NewMeetingService(meetingRepository, pushSender)
 	meetingHandler := handler.NewMeetingHandler(meetingService)
 	voteHandler := handler.NewVoteHandler(meetingService)
 

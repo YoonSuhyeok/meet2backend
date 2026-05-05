@@ -1,2 +1,35 @@
 # 서버 실행 방법
 go run cmd/server/main.go
+
+## Web Push 테스트 발송 환경변수
+
+수동 테스트 푸시 발송 API를 사용하려면 아래 환경변수를 설정하세요.
+
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT` (예: `mailto:dev@meet2meet.local`)
+
+PowerShell 예시:
+
+```powershell
+$env:VAPID_PUBLIC_KEY = "<your-public-key>"
+$env:VAPID_PRIVATE_KEY = "<your-private-key>"
+$env:VAPID_SUBJECT = "mailto:dev@meet2meet.local"
+go run .\cmd\server\main.go
+```
+
+## 테스트 발송 API
+
+- Core API: `POST /meetings/:meetingId/push-test-send`
+- BFF API: `POST /api/meetings/:meetingId/push-test-send`
+
+요청 바디 예시:
+
+```json
+{
+	"title": "테스트 알림",
+	"body": "PWA 알림 도착 확인",
+	"url": "/meeting/35",
+	"tag": "meeting-35-test"
+}
+```

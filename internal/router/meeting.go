@@ -40,4 +40,6 @@ func RegisterMeetingRoutes(r gin.IRouter, h *handler.MeetingHandler) {
 	// 미응답자 독촉 PushNotification 발송 (수동, 호스트만)
 	auth.POST("/meetings/:meetingId/attendance", h.SendAttendanceReminder)
 	auth.POST("/meetings/:meetingId/attendance-nudges", h.SendAttendanceReminder)
+	// 현재 사용자의 활성 구독 대상으로 테스트 푸시 발송 (개발/검증용)
+	auth.POST("/meetings/:meetingId/push-test-send", h.SendTestPush)
 }

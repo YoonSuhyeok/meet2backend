@@ -884,6 +884,10 @@ func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId u
 		return nil, err
 	}
 
+	if s.pushSender == nil {
+		return nil, fmt.Errorf("%w: push sender is not configured", ErrInvalidState)
+	}
+
 	trimmedMessageOverride := strings.TrimSpace(messageOverride)
 	if len(trimmedMessageOverride) > 200 {
 		return nil, fmt.Errorf("%w: messageOverride must be 200 characters or fewer", ErrInvalidInput)
@@ -1159,6 +1163,9 @@ func (s *MeetingService) SendTestPushToSelf(
 	for _, sub := range activeSubscriptions {
 		err := s.pushSender.Send(ctx, sub, payload)
 		if err != nil {
+			if stateErr := updatePushSubscriptionDeliveryState(ctx, s.repository, sub, err); stateErr != nil {
+				log.Printf("[push:test] deviceId=%s state update failed: %v", sub.DeviceId, stateErr)
+			}
 			resp.FailCount++
 			resp.Results = append(resp.Results, SendTestPushResult{
 				DeviceId: sub.DeviceId,

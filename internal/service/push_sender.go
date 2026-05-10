@@ -48,16 +48,16 @@ func (s *WebPushSender) Send(
 		TTL:             s.ttlSeconds,
 	})
 	if err != nil {
-		return err
+		return &PushDeliveryError{Err: err}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		if len(body) > 0 {
-			return fmt.Errorf("web push failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return &PushDeliveryError{
+			StatusCode:   resp.StatusCode,
+			ResponseBody: strings.TrimSpace(string(body)),
 		}
-		return fmt.Errorf("web push failed with status %d", resp.StatusCode)
 	}
 
 	select {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"meetBack/internal/model"
+	"time"
 
 	"github.com/uptrace/bun"
 )
@@ -471,4 +472,86 @@ func (r *MeetingRepository) CreateAttendanceNudge(ctx context.Context, nudge *mo
 	}
 
 	return nudge, nil
+}
+
+func (r *MeetingRepository) ListQueuedAttendanceNudges(ctx context.Context, limit int) ([]*model.AttendanceNudge, error) {
+	var nudges []*model.AttendanceNudge
+	err := r.db.NewSelect().
+		Model(&nudges).
+		Where("status = ?", "queued").
+		OrderExpr("queued_at ASC, id ASC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return nudges, nil
+}
+
+func (r *MeetingRepository) GetAttendanceReminderTargets(ctx context.Context, meetingId uint32) ([]*model.NotificationSubscription, error) {
+	var subs []*model.NotificationSubscription
+	err := r.db.NewSelect().
+		Model(&subs).
+		Join("JOIN meeting_participants AS mp ON mp.meeting_id = ns.meeting_id AND mp.requester_id = ns.user_id").
+		Join("LEFT JOIN votes AS v ON v.meeting_id = mp.meeting_id AND v.user_id = mp.requester_id").
+		Where("ns.meeting_id = ?", meetingId).
+		Where("mp.status = ?", "active").
+		Where("v.id IS NULL").
+		Where("ns.is_active = TRUE").
+		Where("ns.endpoint_status = ?", "active").
+		Where("ns.notification_permission_status = ?", "granted").
+		OrderExpr("ns.updated_at DESC, ns.id DESC").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return subs, nil
+}
+
+func (r *MeetingRepository) MarkAttendanceNudgeSent(ctx context.Context, nudgeId string, sentAt time.Time) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.AttendanceNudge)(nil)).
+		Set("status = ?", "sent").
+		Set("sent_at = ?", sentAt).
+		Set("updated_at = NOW()").
+		Where("nudge_id = ?", nudgeId).
+		Exec(ctx)
+
+	return err
+}
+
+func (r *MeetingRepository) MarkAttendanceNudgeFailed(ctx context.Context, nudgeId string) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.AttendanceNudge)(nil)).
+		Set("status = ?", "failed").
+		Set("updated_at = NOW()").
+		Where("nudge_id = ?", nudgeId).
+		Exec(ctx)
+
+	return err
+}
+
+func (r *MeetingRepository) MarkPushSubscriptionInvalid(ctx context.Context, subscriptionId uint32) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.NotificationSubscription)(nil)).
+		Set("is_active = FALSE").
+		Set("endpoint_status = ?", "invalid").
+		Set("updated_at = NOW()").
+		Where("id = ?", subscriptionId).
+		Exec(ctx)
+
+	return err
+}
+
+func (r *MeetingRepository) MarkPushSubscriptionSuppressed(ctx context.Context, subscriptionId uint32) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.NotificationSubscription)(nil)).
+		Set("endpoint_status = ?", "sending_suppressed").
+		Set("updated_at = NOW()").
+		Where("id = ?", subscriptionId).
+		Exec(ctx)
+
+	return err
 }

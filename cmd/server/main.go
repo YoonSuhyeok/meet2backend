@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"meetBack/internal/config"
@@ -22,6 +23,9 @@ func main() {
 	}
 	defer db.Close()
 
+	appCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	healthHandler := handler.NewHealthHandler(db)
 
 	meetingRepository := repository.NewMeetingRepository(db)
@@ -36,6 +40,9 @@ func main() {
 		log.Printf("[push] disabled: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY is not configured")
 	}
 	meetingService := service.NewMeetingService(meetingRepository, pushSender)
+	if pushSender != nil {
+		go service.NewAttendanceNudgeWorker(meetingRepository, pushSender).Run(appCtx)
+	}
 	meetingHandler := handler.NewMeetingHandler(meetingService)
 	voteHandler := handler.NewVoteHandler(meetingService)
 

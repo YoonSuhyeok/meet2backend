@@ -86,7 +86,6 @@ type NotificationSubscription struct {
 	bun.BaseModel `bun:"table:notification_subscriptions,alias:ns"`
 
 	ID                           uint32    `bun:"id,pk,autoincrement" json:"id"`
-	MeetingId                    uint32    `bun:"meeting_id,notnull" json:"meetingId"`
 	UserId                       string    `bun:"user_id,notnull" json:"userId"`
 	DeviceId                     string    `bun:"device_id,notnull" json:"deviceId"`
 	Endpoint                     string    `bun:"endpoint,notnull" json:"endpoint"`

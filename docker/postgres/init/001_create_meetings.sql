@@ -119,11 +119,10 @@ CREATE INDEX IF NOT EXISTS meeting_participants_requester_id_idx
     ON meeting_participants (requester_id);
 
 -- ─────────────────────────────────────────────────────────────
--- notification_subscriptions : 미팅 단위 푸시 구독
+-- notification_subscriptions : 사용자/기기 단위 푸시 구독
 -- ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS notification_subscriptions (
     id                               SERIAL       PRIMARY KEY,
-    meeting_id                       INTEGER      NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
     user_id                          VARCHAR(64)  NOT NULL,
     device_id                        VARCHAR(64)  NOT NULL,
     endpoint                         TEXT         NOT NULL,
@@ -143,11 +142,11 @@ CREATE TABLE IF NOT EXISTS notification_subscriptions (
     CONSTRAINT notification_subscriptions_endpoint_status_chk
         CHECK (endpoint_status IN ('active', 'sending_suppressed', 'invalid')),
     CONSTRAINT notification_subscriptions_uniq
-        UNIQUE (meeting_id, user_id, device_id)
+        UNIQUE (user_id, device_id)
 );
 
-CREATE INDEX IF NOT EXISTS notification_subscriptions_meeting_active_idx
-    ON notification_subscriptions (meeting_id, is_active, endpoint_status);
+CREATE INDEX IF NOT EXISTS notification_subscriptions_active_idx
+    ON notification_subscriptions (user_id, is_active, endpoint_status);
 
 CREATE INDEX IF NOT EXISTS notification_subscriptions_user_device_idx
     ON notification_subscriptions (user_id, device_id);

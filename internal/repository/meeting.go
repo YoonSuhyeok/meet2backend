@@ -356,7 +356,6 @@ func (r *MeetingRepository) ClearMeetingFinalization(
 
 func (r *MeetingRepository) AddPushSubscription(
 	ctx context.Context,
-	meetingId uint32,
 	userId string,
 	deviceId string,
 	isStandalone bool,
@@ -366,7 +365,6 @@ func (r *MeetingRepository) AddPushSubscription(
 	p256dh string,
 ) error {
 	record := &model.NotificationSubscription{
-		MeetingId:                    meetingId,
 		UserId:                       userId,
 		DeviceId:                     deviceId,
 		Endpoint:                     endpoint,
@@ -380,7 +378,7 @@ func (r *MeetingRepository) AddPushSubscription(
 
 	_, err := r.db.NewInsert().
 		Model(record).
-		On("CONFLICT (meeting_id, user_id, device_id) DO UPDATE").
+		On("CONFLICT (user_id, device_id) DO UPDATE").
 		Set("endpoint = EXCLUDED.endpoint").
 		Set("p256dh = EXCLUDED.p256dh").
 		Set("auth = EXCLUDED.auth").
@@ -395,12 +393,11 @@ func (r *MeetingRepository) AddPushSubscription(
 	return err
 }
 
-func (r *MeetingRepository) RemovePushSubscription(ctx context.Context, meetingId uint32, userId string, deviceId string) error {
+func (r *MeetingRepository) RemovePushSubscription(ctx context.Context, userId string, deviceId string) error {
 	_, err := r.db.NewUpdate().
 		Model((*model.NotificationSubscription)(nil)).
 		Set("is_active = FALSE").
 		Set("updated_at = NOW()").
-		Where("meeting_id = ?", meetingId).
 		Where("user_id = ?", userId).
 		Where("device_id = ?", deviceId).
 		Exec(ctx)
@@ -408,11 +405,10 @@ func (r *MeetingRepository) RemovePushSubscription(ctx context.Context, meetingI
 	return err
 }
 
-func (r *MeetingRepository) GetPushSubscriptionByDevice(ctx context.Context, meetingId uint32, userId string, deviceId string) (*model.NotificationSubscription, error) {
+func (r *MeetingRepository) GetPushSubscriptionByDevice(ctx context.Context, userId string, deviceId string) (*model.NotificationSubscription, error) {
 	var sub model.NotificationSubscription
 	err := r.db.NewSelect().
 		Model(&sub).
-		Where("meeting_id = ?", meetingId).
 		Where("user_id = ?", userId).
 		Where("device_id = ?", deviceId).
 		Scan(ctx)
@@ -426,11 +422,10 @@ func (r *MeetingRepository) GetPushSubscriptionByDevice(ctx context.Context, mee
 	return &sub, nil
 }
 
-func (r *MeetingRepository) GetPushSubscriptionsByUser(ctx context.Context, meetingId uint32, userId string) ([]*model.NotificationSubscription, error) {
+func (r *MeetingRepository) GetPushSubscriptionsByUser(ctx context.Context, userId string) ([]*model.NotificationSubscription, error) {
 	var subs []*model.NotificationSubscription
 	err := r.db.NewSelect().
 		Model(&subs).
-		Where("meeting_id = ?", meetingId).
 		Where("user_id = ?", userId).
 		Order("updated_at DESC").
 		Scan(ctx)
@@ -447,7 +442,7 @@ func (r *MeetingRepository) CountAttendanceReminderTargets(ctx context.Context, 
 		TableExpr("meeting_participants AS mp").
 		ColumnExpr("COUNT(DISTINCT mp.requester_id)").
 		Join("LEFT JOIN votes AS v ON v.meeting_id = mp.meeting_id AND v.user_id = mp.requester_id").
-		Join("JOIN notification_subscriptions AS ns ON ns.meeting_id = mp.meeting_id AND ns.user_id = mp.requester_id").
+		Join("JOIN notification_subscriptions AS ns ON ns.user_id = mp.requester_id").
 		Where("mp.meeting_id = ?", meetingId).
 		Where("mp.status = ?", "active").
 		Where("v.id IS NULL").
@@ -493,9 +488,9 @@ func (r *MeetingRepository) GetAttendanceReminderTargets(ctx context.Context, me
 	var subs []*model.NotificationSubscription
 	err := r.db.NewSelect().
 		Model(&subs).
-		Join("JOIN meeting_participants AS mp ON mp.meeting_id = ns.meeting_id AND mp.requester_id = ns.user_id").
+		Join("JOIN meeting_participants AS mp ON mp.requester_id = ns.user_id").
 		Join("LEFT JOIN votes AS v ON v.meeting_id = mp.meeting_id AND v.user_id = mp.requester_id").
-		Where("ns.meeting_id = ?", meetingId).
+		Where("mp.meeting_id = ?", meetingId).
 		Where("mp.status = ?", "active").
 		Where("v.id IS NULL").
 		Where("ns.is_active = TRUE").

@@ -40,6 +40,47 @@ func ensureSchema(db *sql.DB) error {
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS final_slot VARCHAR(16)",
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_by VARCHAR(64)",
 		"ALTER TABLE meetings ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ",
+		`DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1
+				FROM information_schema.tables
+				WHERE table_schema = 'public'
+				  AND table_name = 'notification_subscriptions'
+			) THEN
+				IF EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+					  AND table_name = 'notification_subscriptions'
+					  AND column_name = 'meeting_id'
+				) THEN
+					ALTER TABLE notification_subscriptions ALTER COLUMN meeting_id DROP NOT NULL;
+				END IF;
+
+				ALTER TABLE notification_subscriptions DROP CONSTRAINT IF EXISTS notification_subscriptions_uniq;
+				DROP INDEX IF EXISTS notification_subscriptions_meeting_active_idx;
+
+				WITH ranked AS (
+					SELECT
+						id,
+						ROW_NUMBER() OVER (
+							PARTITION BY user_id, device_id
+							ORDER BY is_active DESC, updated_at DESC, created_at DESC, id DESC
+						) AS row_num
+					FROM notification_subscriptions
+				)
+				DELETE FROM notification_subscriptions ns
+				USING ranked
+				WHERE ns.id = ranked.id
+				  AND ranked.row_num > 1;
+
+				CREATE UNIQUE INDEX IF NOT EXISTS notification_subscriptions_user_device_unique_idx
+					ON notification_subscriptions (user_id, device_id);
+				CREATE INDEX IF NOT EXISTS notification_subscriptions_active_idx
+					ON notification_subscriptions (user_id, is_active, endpoint_status);
+			END IF;
+		END $$`,
 	}
 
 	for _, stmt := range stmts {

@@ -30,6 +30,7 @@ go run .\cmd\server\main.go
 - worker는 서버 시작 시 자동으로 실행됩니다.
 - VAPID 환경변수가 없으면 worker도 실행되지 않고, 수동 독촉 API는 `push sender is not configured` 오류를 반환합니다.
 - Web Push 발송이 terminal failure로 판정되면 endpoint는 자동으로 `sending_suppressed` 또는 `invalid` 상태로 전이됩니다.
+- push subscription은 이제 미팅별이 아니라 `userId + deviceId` 기준으로 저장되고, 미팅 API에서는 같은 기기 구독을 재사용합니다.
 
 요청 바디 예시:
 

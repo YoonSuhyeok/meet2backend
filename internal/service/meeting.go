@@ -924,7 +924,7 @@ func (s *MeetingService) SendAttendanceReminder(ctx context.Context, meetingId u
 }
 
 func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint32, userId string, input AddPushSubscriptionInput) error {
-	meeting, err := s.repository.GetMeetingById(ctx, meetingId)
+	_, err := s.repository.GetMeetingById(ctx, meetingId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return ErrNotFound
@@ -950,10 +950,8 @@ func (s *MeetingService) AddPushSubscription(ctx context.Context, meetingId uint
 		return fmt.Errorf("%w: invalid push subscription payload", ErrInvalidInput)
 	}
 
-	_ = meeting
 	return s.repository.AddPushSubscription(
 		ctx,
-		meetingId,
 		strings.TrimSpace(userId),
 		strings.TrimSpace(input.DeviceId),
 		input.IsStandalone,
@@ -981,7 +979,7 @@ func (s *MeetingService) RemovePushSubscription(ctx context.Context, meetingId u
 		return fmt.Errorf("%w: device ID is required", ErrInvalidInput)
 	}
 
-	return s.repository.RemovePushSubscription(ctx, meetingId, strings.TrimSpace(userId), strings.TrimSpace(deviceId))
+	return s.repository.RemovePushSubscription(ctx, strings.TrimSpace(userId), strings.TrimSpace(deviceId))
 }
 
 func (s *MeetingService) GetPushSubscriptionStatus(ctx context.Context, meetingId uint32, userId string, deviceId string) (*PushSubscriptionStatusResponse, error) {
@@ -1002,7 +1000,7 @@ func (s *MeetingService) GetPushSubscriptionStatus(ctx context.Context, meetingI
 		return nil, fmt.Errorf("%w: device ID is required", ErrInvalidInput)
 	}
 
-	subscription, err := s.repository.GetPushSubscriptionByDevice(ctx, meetingId, userId, deviceId)
+	subscription, err := s.repository.GetPushSubscriptionByDevice(ctx, userId, deviceId)
 	if err != nil {
 		return nil, err
 	}
@@ -1051,7 +1049,7 @@ func (s *MeetingService) GetMyPushSubscriptionStatus(ctx context.Context, meetin
 		return nil, ErrForbidden
 	}
 
-	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, meetingId, userId)
+	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -1099,7 +1097,7 @@ func (s *MeetingService) SendTestPushToSelf(
 		return nil, fmt.Errorf("%w: push sender is not configured", ErrInvalidState)
 	}
 
-	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, meetingId, userId)
+	subscriptions, err := s.repository.GetPushSubscriptionsByUser(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
